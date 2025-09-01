@@ -108,30 +108,23 @@ class NeynarClient:
     
     def get_user_by_fid(self, fid: int) -> Dict:
         """Récupérer un utilisateur par FID selon la doc officielle"""
-        endpoint = f"/v2/farcaster/user/bulk?fids={fid}"
+        endpoint = f"/v2/farcaster/user?fid={fid}"
         response = self._make_request(endpoint)
         
-        if not response.get("users") or len(response["users"]) == 0:
+        if not response.get("user"):
             raise ValueError(f"Utilisateur FID {fid} non trouvé")
         
-        return response["users"][0]
+        return response["user"]
     
     def get_user_by_username(self, username: str) -> Dict:
         """Récupérer un utilisateur par username selon la doc officielle"""
-        endpoint = f"/v2/farcaster/user/search?q={username}&viewer_fid=1"
+        endpoint = f"/v2/farcaster/user?username={username}"
         response = self._make_request(endpoint)
         
-        if not response.get("users") or len(response["users"]) == 0:
+        if not response.get("user"):
             raise ValueError(f"Utilisateur {username} non trouvé")
         
-        # Chercher une correspondance exacte
-        for user in response["users"]:
-            if user.get("username", "").lower() == username.lower():
-                return user
-        
-        # Si pas de correspondance exacte, retourner le premier
-        logger.warning(f"Pas de correspondance exacte pour {username}, utilisation du premier résultat")
-        return response["users"][0]
+        return response["user"]
     
     def resolve_user(self, input_value: Union[str, int]) -> Dict:
         """Résoudre un utilisateur par FID ou username"""
