@@ -1,0 +1,29 @@
+[build]
+builder = "DOCKERFILE"
+dockerfilePath = "Dockerfile"
+
+[deploy]
+startCommand = "python main.py"
+healthcheckPath = "/healthz"
+healthcheckTimeout = 300
+restartPolicyType = "ON_FAILURE"
+restartPolicyMaxRetries = 10
+
+# Variables d'environnement recommandées pour Railway
+[deploy.variables]
+# Discord Bot Configuration
+DISCORD_TOKEN = "your_discord_bot_token_here"
+DISCORD_APPLICATION_ID = "your_discord_application_id_here"
+
+# Neynar API Configuration  
+NEYNAR_API_KEY = "your_neynar_api_key_here"
+NEYNAR_WEBHOOK_SECRET = "your_neynar_webhook_secret_here"
+
+# Public URL for webhooks (Railway domain)
+PUBLIC_BASE_URL = "https://your-app-name.up.railway.app"
+
+# Configuration optionnelle
+LOG_LEVEL = "INFO"
+PORT = "8000"
+
+# Note: DATABASE_URL sera généré automatiquement par Railway PostgreSQL
