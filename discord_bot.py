@@ -26,11 +26,12 @@ async def on_ready():
     logger.info(f'ID du bot: {bot.user.id}')
     logger.info(f'Serveurs connectés: {len(bot.guilds)}')
     
-    # Synchroniser le webhook au démarrage
-    try:
-        sync_neynar_webhook()
-    except Exception as e:
-        logger.error(f"Erreur lors de la synchronisation initiale du webhook: {e}")
+    # Synchroniser le webhook au démarrage (désactivé temporairement)
+    # try:
+    #     sync_neynar_webhook()
+    # except Exception as e:
+    #     logger.error(f"Erreur lors de la synchronisation initiale du webhook: {e}")
+    logger.info("Synchronisation automatique du webhook désactivée - utilisez !test-neynar pour tester")
 
 @bot.event
 async def on_guild_join(guild):
