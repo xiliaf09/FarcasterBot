@@ -13,6 +13,11 @@ def sync_neynar_webhook():
     try:
         logger.info("Début de la synchronisation du webhook Neynar...")
         
+        # Vérifier que le client Neynar est disponible
+        if not neynar_client or not hasattr(neynar_client, 'create_webhook'):
+            logger.error("Client Neynar non disponible ou invalide")
+            return
+        
         # Récupérer tous les FIDs suivis (toutes guilds confondues)
         db = SessionLocal()
         try:
@@ -47,7 +52,8 @@ def sync_neynar_webhook():
                     
                 except Exception as e:
                     logger.error(f"Erreur lors de la création du webhook: {e}")
-                    raise
+                    # Ne pas lever l'exception, juste logger l'erreur
+                    return
                     
             else:
                 # Vérifier si la liste des FIDs a changé
@@ -74,7 +80,8 @@ def sync_neynar_webhook():
                         
                     except Exception as e:
                         logger.error(f"Erreur lors de la mise à jour du webhook: {e}")
-                        raise
+                        # Ne pas lever l'exception, juste logger l'erreur
+                        return
                 else:
                     logger.info("Aucun changement de FIDs détecté, webhook à jour")
             
@@ -85,7 +92,8 @@ def sync_neynar_webhook():
             
     except Exception as e:
         logger.error(f"Échec de la synchronisation du webhook Neynar: {e}")
-        raise
+        # Ne pas lever l'exception, juste logger l'erreur
+        return
 
 def get_webhook_state():
     """Récupérer l'état actuel du webhook"""

@@ -35,21 +35,24 @@ async def on_ready():
 @bot.event
 async def on_guild_join(guild):
     """Événement déclenché quand le bot rejoint un serveur"""
-    logger.info(f'Bot rejoint le serveur: {guild.name} (ID: {guild.id})')
-    
-    # Créer l'entrée de guild en base
-    db = SessionLocal()
     try:
-        existing_guild = db.query(Guild).filter_by(id=guild.id).first()
-        if not existing_guild:
-            new_guild = Guild(id=guild.id)
-            db.add(new_guild)
-            db.commit()
-            logger.info(f"Guild {guild.name} ajoutée à la base de données")
+        logger.info(f'Bot rejoint le serveur: {guild.name} (ID: {guild.id})')
+        
+        # Créer l'entrée de guild en base
+        db = SessionLocal()
+        try:
+            existing_guild = db.query(Guild).filter_by(id=guild.id).first()
+            if not existing_guild:
+                new_guild = Guild(id=guild.id)
+                db.add(new_guild)
+                db.commit()
+                logger.info(f"Guild {guild.name} ajoutée à la base de données")
+        except Exception as e:
+            logger.error(f"Erreur lors de l'ajout de la guild {guild.name}: {e}")
+        finally:
+            db.close()
     except Exception as e:
-        logger.error(f"Erreur lors de l'ajout de la guild {guild.name}: {e}")
-    finally:
-        db.close()
+        logger.error(f"Erreur générale dans on_guild_join: {e}")
 
 @bot.command(name='track')
 async def track_command(ctx, fid_or_username: str, channel: Optional[discord.TextChannel] = None):
