@@ -100,8 +100,11 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
             db.add(tracked_account)
             db.commit()
             
-            # Synchroniser le webhook Neynar
-            sync_neynar_webhook()
+            # Synchroniser le webhook Neynar (désactivé temporairement)
+            # try:
+            #     sync_neynar_webhook()
+            # except Exception as e:
+            #     logger.error(f"Erreur lors de la synchronisation webhook: {e}")
             
             await ctx.reply(f"✅ Compte Farcaster `{user['username']}` (FID: {user['fid']}) ajouté au suivi dans {target_channel.mention} !")
             
