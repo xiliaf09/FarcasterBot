@@ -5,7 +5,7 @@ import hashlib
 import json
 import logging
 import uuid
-from typing import Dict, Any
+from typing import Dict, Any, List
 from database import SessionLocal, TrackedAccount, Delivery
 from discord_bot import bot
 from config import config
@@ -52,7 +52,7 @@ async def health_check():
 
 @app.post("/webhooks/neynar")
 async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
-    """Endpoint pour recevoir les webhooks Neynar"""
+    """Endpoint pour recevoir les webhooks Neynar selon la structure officielle"""
     try:
         # Lire le corps brut de la requête
         body = await request.body()
@@ -69,12 +69,12 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
             logger.error(f"Erreur de parsing JSON: {e}")
             raise HTTPException(status_code=400, detail="JSON invalide")
         
-        # Vérifier que c'est un event cast.created
+        # Vérifier que c'est un event cast.created selon la structure officielle
         if data.get("type") != "cast.created":
             logger.info(f"Event ignoré (type: {data.get('type')})")
             return {"status": "ignored", "reason": "not cast.created"}
         
-        # Extraire les données du cast
+        # Extraire les données du cast selon la structure officielle
         cast_data = data.get("data", {})
         author = cast_data.get("author", {})
         cast_hash = cast_data.get("hash")
@@ -82,6 +82,11 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
         timestamp = cast_data.get("timestamp")
         parent_hash = cast_data.get("parent_hash")
         parent_url = cast_data.get("parent_url")
+        thread_hash = cast_data.get("thread_hash")
+        embeds = cast_data.get("embeds", [])
+        reactions = cast_data.get("reactions", {})
+        replies = cast_data.get("replies", {})
+        views = cast_data.get("views", {})
         
         if not all([cast_hash, author.get("fid"), author.get("username")]):
             logger.warning("Données de cast incomplètes reçues")
@@ -110,8 +115,8 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
                     logger.info(f"Cast {cast_hash} déjà livré dans le salon {tracked_account.channel_id}")
                     continue
                 
-                # Construire l'embed Discord
-                embed = build_cast_embed(cast_data, author)
+                # Construire l'embed Discord avec tous les champs disponibles
+                embed = build_cast_embed(cast_data, author, embeds, reactions, replies, views)
                 
                 # Envoyer le message
                 channel = bot.get_channel(int(tracked_account.channel_id))
@@ -153,8 +158,9 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
         logger.error(f"Erreur lors du traitement du webhook: {e}")
         raise HTTPException(status_code=500, detail="Erreur interne du serveur")
 
-def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any]) -> Dict[str, Any]:
-    """Construire l'embed Discord pour un cast"""
+def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any], 
+                    embeds: List[Dict], reactions: Dict, replies: Dict, views: Dict) -> Dict[str, Any]:
+    """Construire l'embed Discord pour un cast selon la structure officielle Neynar"""
     # Construire l'URL Warpcast
     username = author.get("username", "")
     cast_hash = cast_data.get("hash", "")
@@ -166,7 +172,7 @@ def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any]) -> Dict[
     if len(text) > 500:
         text = text[:497] + "..."
     
-    # Construire l'embed
+    # Construire l'embed de base
     embed = {
         "title": f"@{username} a posté",
         "description": text,
@@ -178,28 +184,83 @@ def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any]) -> Dict[
         }
     }
     
-    # Ajouter les champs conditionnels
+    # Ajouter les champs conditionnels selon la structure officielle
     fields = []
+    
+    # Gestion des replies
     if cast_data.get("parent_hash") or cast_data.get("parent_url"):
         if cast_data.get("parent_url"):
             fields.append({
-                "name": "Réponse à",
+                "name": "💬 Réponse à",
                 "value": cast_data["parent_url"],
                 "inline": False
             })
         else:
             fields.append({
-                "name": "Réponse",
+                "name": "💬 Réponse",
                 "value": "Réponse dans un thread",
                 "inline": False
+            })
+    
+    # Gestion des threads
+    if cast_data.get("thread_hash"):
+        fields.append({
+            "name": "🧵 Thread",
+            "value": f"Thread: {cast_data['thread_hash'][:8]}...",
+            "inline": True
+        })
+    
+    # Gestion des embeds
+    if embeds:
+        embed_count = len(embeds)
+        fields.append({
+            "name": "🔗 Liens",
+            "value": f"{embed_count} lien(s) attaché(s)",
+            "inline": True
+        })
+    
+    # Gestion des réactions
+    if reactions:
+        total_reactions = sum(reactions.values())
+        fields.append({
+            "name": "❤️ Réactions",
+            "value": f"{total_reactions} réaction(s)",
+            "inline": True
+        })
+    
+    # Gestion des vues
+    if views:
+        view_count = views.get("count", 0)
+        if view_count > 0:
+            fields.append({
+                "name": "👁️ Vues",
+                "value": f"{view_count} vue(s)",
+                "inline": True
+            })
+    
+    # Gestion des replies
+    if replies:
+        reply_count = replies.get("count", 0)
+        if reply_count > 0:
+            fields.append({
+                "name": "💬 Réponses",
+                "value": f"{reply_count} réponse(s)",
+                "inline": True
             })
     
     if fields:
         embed["fields"] = fields
     
     # Ajouter l'avatar si disponible
-    if author.get("pfp"):
-        embed["thumbnail"] = {"url": author["pfp"]}
+    if author.get("pfp_url"):  # Correction selon la doc officielle
+        embed["thumbnail"] = {"url": author["pfp_url"]}
+    
+    # Ajouter des informations sur l'auteur
+    embed["author"] = {
+        "name": author.get("display_name", username),
+        "url": f"https://warpcast.com/{username}",
+        "icon_url": author.get("pfp_url", "")
+    }
     
     return embed
 
@@ -212,6 +273,62 @@ async def admin_resync():
         return {"status": "success", "message": "Webhook resynchronisé"}
     except Exception as e:
         logger.error(f"Erreur lors de la resynchronisation: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/webhook/status")
+async def admin_webhook_status():
+    """Route admin pour vérifier le statut du webhook Neynar"""
+    try:
+        from webhook_sync import get_webhook_stats
+        stats = get_webhook_stats()
+        return stats
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération du statut: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/webhook/test")
+async def admin_webhook_test():
+    """Route admin pour tester la connexion au webhook Neynar"""
+    try:
+        from webhook_sync import test_webhook_connection
+        success = test_webhook_connection()
+        return {
+            "status": "success" if success else "error",
+            "webhook_connection": "active" if success else "failed"
+        }
+    except Exception as e:
+        logger.error(f"Erreur lors du test de connexion: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.get("/admin/neynar/rate-limits")
+async def admin_neynar_rate_limits():
+    """Route admin pour vérifier les rate limits Neynar"""
+    try:
+        from neynar_client import neynar_client
+        return {
+            "status": "success",
+            "current_plan": neynar_client.current_plan,
+            "rate_limits": neynar_client.rate_limits[neynar_client.current_plan],
+            "requests_this_minute": neynar_client.requests_this_minute,
+            "last_request_time": neynar_client.last_request_time
+        }
+    except Exception as e:
+        logger.error(f"Erreur lors de la récupération des rate limits: {e}")
+        raise HTTPException(status_code=500, detail=str(e))
+
+@app.post("/admin/neynar/set-plan")
+async def admin_set_plan(plan: str):
+    """Route admin pour changer le plan de rate limits"""
+    try:
+        from neynar_client import neynar_client
+        neynar_client.set_plan(plan)
+        return {
+            "status": "success",
+            "message": f"Plan défini sur: {plan}",
+            "new_plan": neynar_client.current_plan
+        }
+    except Exception as e:
+        logger.error(f"Erreur lors du changement de plan: {e}")
         raise HTTPException(status_code=500, detail=str(e))
 
 if __name__ == "__main__":

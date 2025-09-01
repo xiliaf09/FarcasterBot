@@ -22,6 +22,16 @@ Un bot Discord intelligent qui permet de tracker les comptes Farcaster et de rec
 | `!test` | Tester les notifications | `!test` |
 | `!help` | Afficher l'aide | `!help` |
 
+## 🌐 **Routes d'Administration (Neynar)**
+
+| Route | Description | Utilisation |
+|-------|-------------|-------------|
+| `/admin/webhook/status` | Statut du webhook Neynar | Monitoring |
+| `/admin/webhook/test` | Test de connexion webhook | Diagnostic |
+| `/admin/neynar/rate-limits` | Rate limits actuels | Performance |
+| `/admin/neynar/set-plan` | Changer le plan (starter/growth/scale) | Configuration |
+| `/admin/resync` | Resynchroniser le webhook | Maintenance |
+
 ## 🛠️ Prérequis
 
 ### Discord Bot
