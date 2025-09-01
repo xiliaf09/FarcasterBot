@@ -250,6 +250,103 @@ async def test_command(ctx):
         logger.error(f"Erreur dans la commande test: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='test-neynar')
+async def test_neynar_command(ctx):
+    """Commande pour tester la connexion à l'API Neynar"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        embed = discord.Embed(
+            title="🧪 Test de Connexion Neynar",
+            description="Test en cours...",
+            color=0xFFFF00
+        )
+        embed.set_footer(text="Farcaster Tracker Bot")
+        
+        # Envoyer le message initial
+        message = await ctx.reply(embed=embed)
+        
+        # Test 1: Vérifier la configuration
+        embed.add_field(
+            name="1️⃣ Configuration",
+            value="✅ API Key configurée\n✅ Webhook Secret configuré\n✅ Base URL configurée",
+            inline=False
+        )
+        await message.edit(embed=embed)
+        
+        # Test 2: Test de résolution d'utilisateur
+        try:
+            user = neynar_client.resolve_user("dwr")
+            embed.add_field(
+                name="2️⃣ Résolution Utilisateur",
+                value=f"✅ @{user['username']} (FID: {user['fid']})",
+                inline=False
+            )
+            embed.color = 0x00FF00
+        except Exception as e:
+            embed.add_field(
+                name="2️⃣ Résolution Utilisateur",
+                value=f"❌ Erreur: {str(e)}",
+                inline=False
+            )
+            embed.color = 0xFF0000
+        
+        await message.edit(embed=embed)
+        
+        # Test 3: Test de création de webhook
+        try:
+            from webhook_sync import get_webhook_stats
+            stats = get_webhook_stats()
+            
+            if stats.get("status") == "active":
+                embed.add_field(
+                    name="3️⃣ Webhook Neynar",
+                    value=f"✅ Webhook actif (ID: {stats.get('webhook_id', 'N/A')})\n✅ {stats.get('author_fids_count', 0)} FID(s) configuré(s)",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="3️⃣ Webhook Neynar",
+                    value=f"⚠️ Statut: {stats.get('status', 'N/A')}\n📝 {stats.get('message', 'Aucun message')}",
+                    inline=False
+                )
+        except Exception as e:
+            embed.add_field(
+                name="3️⃣ Webhook Neynar",
+                value=f"❌ Erreur: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 4: Test de synchronisation
+        try:
+            from webhook_sync import sync_neynar_webhook
+            sync_neynar_webhook()
+            embed.add_field(
+                name="4️⃣ Synchronisation",
+                value="✅ Synchronisation réussie",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="4️⃣ Synchronisation",
+                value=f"❌ Erreur: {str(e)}",
+                inline=False
+            )
+        
+        # Mise à jour finale
+        embed.description = "Test de connexion Neynar terminé"
+        await message.edit(embed=embed)
+        
+        logger.info(f"Test Neynar effectué dans {ctx.guild.name} par {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande test-neynar: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
