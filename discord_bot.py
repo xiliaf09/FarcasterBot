@@ -249,53 +249,61 @@ async def test_command(ctx):
 
 @bot.command(name='help')
 async def help_command(ctx):
-    """Commande d'aide"""
+    """Commande d'aide - redirige vers far-help"""
+    await ctx.send("💡 Utilisez `!far-help` pour voir l'aide complète des commandes Farcaster, ou `!help` pour l'aide Discord standard.")
+
+@bot.command(name='far-help')
+async def far_help(ctx):
+    """Afficher l'aide pour les commandes Farcaster"""
     embed = discord.Embed(
-        title="📚 Aide - Farcaster Tracker",
-        description="Commandes disponibles pour tracker les comptes Farcaster :",
-        color=0x8B5CF6
+        title="🤖 Aide Farcaster Tracker",
+        description="Commandes disponibles pour tracker les comptes Farcaster",
+        color=0x6F4CFF
     )
     
     embed.add_field(
-        name="🔍 `!track <fid_ou_username> [salon]`",
-        value="Suivre un compte Farcaster (par FID ou username)",
+        name="📱 Commandes de Tracking",
+        value="""
+        `!track <fid_ou_username> [channel]` - Commencer à tracker un compte
+        `!untrack <fid_ou_username>` - Arrêter de tracker un compte
+        `!list` - Lister tous les comptes trackés
+        """,
         inline=False
     )
+    
     embed.add_field(
-        name="❌ `!untrack <fid_ou_username>`",
-        value="Arrêter de suivre un compte",
-        inline=False
-    )
-    embed.add_field(
-        name="📋 `!list`",
-        value="Lister tous les comptes suivis",
-        inline=False
-    )
-    embed.add_field(
-        name="⚙️ `!setchannel <#salon>`",
-        value="Définir le salon par défaut",
-        inline=False
-    )
-    embed.add_field(
-        name="🧪 `!test`",
-        value="Tester les notifications",
-        inline=False
-    )
-    embed.add_field(
-        name="❓ `!help`",
-        value="Afficher cette aide",
+        name="⚙️ Commandes de Configuration",
+        value="""
+        `!setchannel <#channel>` - Définir le salon par défaut
+        `!test` - Envoyer un message de test
+        `!help` - Afficher cette aide
+        """,
         inline=False
     )
     
     embed.add_field(
         name="💡 Exemples",
-        value="`!track 544244` - Suivre par FID\n`!track alice` - Suivre par username\n`!track dwr.eth #notifications` - Suivre dans un salon spécifique",
+        value="""
+        `!track dwr` - Tracker l'utilisateur @dwr
+        `!track 194` - Tracker le FID 194
+        `!track dwr #notifications` - Tracker dans un salon spécifique
+        `!setchannel #general` - Définir #general comme salon par défaut
+        """,
         inline=False
     )
     
-    embed.set_footer(text="Farcaster Tracker Bot")
+    embed.add_field(
+        name="🔗 Liens Utiles",
+        value="""
+        [Warpcast](https://warpcast.com) - Plateforme Farcaster
+        [Neynar](https://neynar.com) - API Farcaster
+        """,
+        inline=False
+    )
     
-    await ctx.reply(embed=embed)
+    embed.set_footer(text="Bot Farcaster Tracker - Notifications instantanées des casts")
+    
+    await ctx.send(embed=embed)
 
 def run_bot():
     """Lancer le bot Discord"""
