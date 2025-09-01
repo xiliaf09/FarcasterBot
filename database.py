@@ -103,7 +103,9 @@ def check_db_connection() -> bool:
     
     try:
         with engine.connect() as conn:
-            conn.execute("SELECT 1")
+            # Utiliser text() pour les requêtes SQL brutes
+            from sqlalchemy import text
+            conn.execute(text("SELECT 1"))
         logger.info("Connexion à la base de données réussie")
         return True
     except Exception as e:
