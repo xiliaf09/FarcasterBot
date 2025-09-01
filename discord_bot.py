@@ -247,11 +247,6 @@ async def test_command(ctx):
         logger.error(f"Erreur dans la commande test: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
-@bot.command(name='help')
-async def help_command(ctx):
-    """Commande d'aide - redirige vers far-help"""
-    await ctx.send("💡 Utilisez `!far-help` pour voir l'aide complète des commandes Farcaster, ou `!help` pour l'aide Discord standard.")
-
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
@@ -276,7 +271,7 @@ async def far_help(ctx):
         value="""
         `!setchannel <#channel>` - Définir le salon par défaut
         `!test` - Envoyer un message de test
-        `!help` - Afficher cette aide
+        `!far-help` - Afficher cette aide
         """,
         inline=False
     )
