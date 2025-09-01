@@ -10,10 +10,6 @@ from config import config
 logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
 logger = logging.getLogger(__name__)
 
-# Créer l'engine de base de données
-engine = create_engine(config.DATABASE_URL)
-SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
-
 # Base pour les modèles
 Base = declarative_base()
 
@@ -59,8 +55,29 @@ class WebhookState(Base):
     author_fids = Column(Text, nullable=False)  # JSON string des FIDs
     updated_at = Column(DateTime(timezone=True), onupdate=func.now())
 
+# Variables globales pour l'engine et SessionLocal
+engine = None
+SessionLocal = None
+
+def init_database_connection():
+    """Initialiser la connexion à la base de données"""
+    global engine, SessionLocal
+    
+    if engine is None:
+        try:
+            logger.info("Initialisation de la connexion à la base de données...")
+            engine = create_engine(config.DATABASE_URL)
+            SessionLocal = sessionmaker(autocommit=False, autoflush=False, bind=engine)
+            logger.info("Connexion à la base de données initialisée avec succès")
+        except Exception as e:
+            logger.error(f"Erreur lors de l'initialisation de la base de données: {e}")
+            raise
+
 def get_db() -> Session:
     """Obtenir une session de base de données"""
+    if SessionLocal is None:
+        init_database_connection()
+    
     db = SessionLocal()
     try:
         yield db
@@ -69,6 +86,9 @@ def get_db() -> Session:
 
 def init_db():
     """Initialiser la base de données"""
+    if engine is None:
+        init_database_connection()
+    
     try:
         Base.metadata.create_all(bind=engine)
         logger.info("Base de données initialisée avec succès")
@@ -78,6 +98,9 @@ def init_db():
 
 def check_db_connection() -> bool:
     """Vérifier la connexion à la base de données"""
+    if engine is None:
+        init_database_connection()
+    
     try:
         with engine.connect() as conn:
             conn.execute("SELECT 1")

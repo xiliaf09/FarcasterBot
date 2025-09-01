@@ -94,8 +94,17 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
         
         logger.info(f"Cast reçu de {author['username']} (FID: {author['fid']}): {text[:50]}...")
         
+        # Vérifier si la base de données est disponible
+        if db is None:
+            logger.warning("Base de données non disponible, webhook ignoré")
+            return {"status": "error", "reason": "database_unavailable"}
+        
         # Trouver tous les serveurs qui suivent cet auteur
-        tracked_accounts = db.query(TrackedAccount).filter_by(fid=author["fid"]).all()
+        try:
+            tracked_accounts = db.query(TrackedAccount).filter_by(fid=author["fid"]).all()
+        except Exception as e:
+            logger.error(f"Erreur lors de la requête base de données: {e}")
+            return {"status": "error", "reason": "database_error"}
         
         if not tracked_accounts:
             logger.info(f"Aucun serveur ne suit l'auteur {author['username']} (FID: {author['fid']})")
@@ -106,10 +115,14 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
         for tracked_account in tracked_accounts:
             try:
                 # Vérifier si ce cast a déjà été livré dans ce salon
-                existing_delivery = db.query(Delivery).filter_by(
-                    cast_hash=cast_hash,
-                    channel_id=tracked_account.channel_id
-                ).first()
+                try:
+                    existing_delivery = db.query(Delivery).filter_by(
+                        cast_hash=cast_hash,
+                        channel_id=tracked_account.channel_id
+                    ).first()
+                except Exception as e:
+                    logger.error(f"Erreur lors de la vérification de livraison: {e}")
+                    continue
                 
                 if existing_delivery:
                     logger.info(f"Cast {cast_hash} déjà livré dans le salon {tracked_account.channel_id}")
@@ -124,16 +137,21 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
                     await channel.send(embed=embed)
                     
                     # Marquer comme livré
-                    delivery = Delivery(
-                        id=str(uuid.uuid4()),
-                        guild_id=tracked_account.guild_id,
-                        channel_id=tracked_account.channel_id,
-                        cast_hash=cast_hash
-                    )
-                    db.add(delivery)
-                    
-                    sent_count += 1
-                    logger.info(f"Notification envoyée dans {channel.name} pour {author['username']}")
+                    try:
+                        delivery = Delivery(
+                            id=str(uuid.uuid4()),
+                            guild_id=tracked_account.guild_id,
+                            channel_id=tracked_account.channel_id,
+                            cast_hash=cast_hash
+                        )
+                        db.add(delivery)
+                        
+                        sent_count += 1
+                        logger.info(f"Notification envoyée dans {channel.name} pour {author['username']}")
+                    except Exception as e:
+                        logger.error(f"Erreur lors de l'ajout de la livraison: {e}")
+                        # Continuer même si la livraison échoue
+                        
                 else:
                     logger.warning(f"Canal {tracked_account.channel_id} non trouvé")
                     
@@ -142,8 +160,11 @@ async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
         
         # Commit des livraisons
         if sent_count > 0:
-            db.commit()
-            logger.info(f"{sent_count} notification(s) envoyée(s) pour le cast de {author['username']}")
+            try:
+                db.commit()
+                logger.info(f"{sent_count} notification(s) envoyée(s) pour le cast de {author['username']}")
+            except Exception as e:
+                logger.error(f"Erreur lors du commit des livraisons: {e}")
         
         return {
             "status": "success",

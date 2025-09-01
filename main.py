@@ -1,6 +1,7 @@
 import asyncio
 import threading
 import logging
+import time
 from config import config
 from database import init_db, check_db_connection
 from discord_bot import run_bot
@@ -35,21 +36,31 @@ def main():
         logger.error("❌ Configuration invalide, arrêt du bot")
         return
     
-    # Initialiser la base de données
-    try:
-        logger.info("🗄️ Initialisation de la base de données...")
-        init_db()
-        
-        # Vérifier la connexion
-        if not check_db_connection():
-            logger.error("❌ Impossible de se connecter à la base de données")
-            return
+    # Vérifier que les variables essentielles sont présentes
+    logger.info("🔧 Vérification de la configuration...")
+    logger.info(f"Discord Token: {'✅ Configuré' if config.DISCORD_TOKEN else '❌ Manquant'}")
+    logger.info(f"Neynar API Key: {'✅ Configuré' if config.NEYNAR_API_KEY else '❌ Manquant'}")
+    logger.info(f"Database URL: {'✅ Configuré' if config.DATABASE_URL else '❌ Manquant'}")
+    logger.info(f"Public Base URL: {'✅ Configuré' if config.PUBLIC_BASE_URL else '❌ Manquant'}")
+    
+    # Initialiser la base de données seulement si DATABASE_URL est configuré
+    if config.DATABASE_URL:
+        try:
+            logger.info("🗄️ Initialisation de la base de données...")
+            init_db()
             
-        logger.info("✅ Base de données initialisée avec succès")
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur lors de l'initialisation de la base: {e}")
-        return
+            # Vérifier la connexion
+            if not check_db_connection():
+                logger.error("❌ Impossible de se connecter à la base de données")
+                logger.warning("⚠️ Le bot continuera sans base de données (mode dégradé)")
+            else:
+                logger.info("✅ Base de données initialisée avec succès")
+                
+        except Exception as e:
+            logger.error(f"❌ Erreur lors de l'initialisation de la base: {e}")
+            logger.warning("⚠️ Le bot continuera sans base de données (mode dégradé)")
+    else:
+        logger.warning("⚠️ DATABASE_URL non configuré, le bot fonctionnera en mode dégradé")
     
     # Lancer le serveur webhook dans un thread séparé
     logger.info(f"🌐 Lancement du serveur webhook sur le port {config.PORT}...")
@@ -57,8 +68,8 @@ def main():
     webhook_thread.start()
     
     # Attendre un peu que le serveur démarre
-    import time
-    time.sleep(2)
+    logger.info("⏳ Attente du démarrage du serveur webhook...")
+    time.sleep(3)
     
     # Lancer le bot Discord
     logger.info("🤖 Lancement du bot Discord...")
