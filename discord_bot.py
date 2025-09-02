@@ -488,6 +488,102 @@ async def lastcast_command(ctx, fid_or_username: str):
         logger.error(f"Erreur dans la commande lastcast: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='debug-cast')
+async def debug_cast_command(ctx, fid_or_username: str):
+    """Commande de debug pour tester différentes méthodes de récupération de casts"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        # Résoudre l'utilisateur Farcaster
+        try:
+            client = get_neynar_client()
+            if client is None:
+                await ctx.reply("❌ Erreur: Client Neynar non initialisé.")
+                return
+                
+            user = client.resolve_user(fid_or_username)
+            if user is None:
+                await ctx.reply(f"❌ Impossible de résoudre l'utilisateur `{fid_or_username}`.")
+                return
+        except Exception as e:
+            await ctx.reply(f"❌ Erreur lors de la résolution: {str(e)}")
+            return
+        
+        # Créer l'embed de debug
+        embed = discord.Embed(
+            title=f"🔍 Debug Cast pour @{user['username']}",
+            description="Test des différentes méthodes de récupération...",
+            color=0xFFFF00,
+            timestamp=discord.utils.utcnow()
+        )
+        
+        # Test 1: search_casts avec from:
+        try:
+            search_query = f"from:{user['username']}"
+            search_result = client.search_casts(search_query, limit=5)
+            casts_count = len(search_result.get("casts", []))
+            embed.add_field(
+                name="1️⃣ search_casts (from:username)",
+                value=f"✅ {casts_count} cast(s) trouvé(s)\nRequête: `{search_query}`",
+                inline=False
+            )
+            
+            if casts_count > 0:
+                for i, cast in enumerate(search_result["casts"][:3]):
+                    embed.add_field(
+                        name=f"Cast {i+1}",
+                        value=f"Texte: {cast.get('text', 'N/A')[:50]}...\nHash: {cast.get('hash', 'N/A')}",
+                        inline=True
+                    )
+        except Exception as e:
+            embed.add_field(
+                name="1️⃣ search_casts (from:username)",
+                value=f"❌ Erreur: {str(e)}",
+                inline=False
+            )
+        
+        # Test 2: search_casts avec le username seul
+        try:
+            search_query = user['username']
+            search_result = client.search_casts(search_query, limit=5)
+            casts_count = len(search_result.get("casts", []))
+            embed.add_field(
+                name="2️⃣ search_casts (username seul)",
+                value=f"✅ {casts_count} cast(s) trouvé(s)\nRequête: `{search_query}`",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="2️⃣ search_casts (username seul)",
+                value=f"❌ Erreur: {str(e)}",
+                inline=False
+            )
+        
+        # Test 3: get_user_feed
+        try:
+            feed_result = client.get_user_feed(user['fid'], limit=5)
+            casts_count = len(feed_result.get("casts", []))
+            embed.add_field(
+                name="3️⃣ get_user_feed (FID)",
+                value=f"✅ {casts_count} cast(s) trouvé(s)\nFID: {user['fid']}",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="3️⃣ get_user_feed (FID)",
+                value=f"❌ Erreur: {str(e)}",
+                inline=False
+            )
+        
+        embed.set_footer(text=f"Debug pour {user['username']} (FID: {user['fid']})")
+        await ctx.reply(embed=embed)
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande debug-cast: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
@@ -504,6 +600,7 @@ async def far_help(ctx):
         `!untrack <fid_ou_username>` - Arrêter de tracker un compte
         `!list` - Lister tous les comptes trackés
         `!lastcast <fid_ou_username>` - Voir le dernier cast d'un compte
+        `!debug-cast <fid_ou_username>` - Debug des méthodes de récupération de casts
         """,
         inline=False
     )
