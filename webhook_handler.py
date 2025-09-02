@@ -88,18 +88,13 @@ def discord_worker():
                         icon_url=author_info.get("icon_url", "")
                     )
                 
-                # Envoyer le message de manière synchrone
-                import asyncio
-                loop = asyncio.new_event_loop()
-                asyncio.set_event_loop(loop)
-                
+                # Envoyer le message de manière synchrone avec asyncio.run()
                 try:
-                    # Créer une coroutine pour envoyer le message
                     async def send_message():
                         await channel.send(embed=embed)
                     
-                    # Exécuter la coroutine
-                    loop.run_until_complete(send_message())
+                    # Utiliser asyncio.run() qui gère correctement l'event loop
+                    asyncio.run(send_message())
                     
                     # Marquer comme livré dans la base de données
                     try:
@@ -123,8 +118,8 @@ def discord_worker():
                     
                     logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
                     
-                finally:
-                    loop.close()
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors de l'envoi du message: {e}")
                 
             except Exception as e:
                 logger.error(f"❌ Erreur lors de l'envoi du message: {e}")
