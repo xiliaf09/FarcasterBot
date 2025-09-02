@@ -88,45 +88,46 @@ def discord_worker():
                         icon_url=author_info.get("icon_url", "")
                     )
                 
-                # Créer un nouvel event loop dans le thread
+                # Envoyer le message de manière synchrone
+                import asyncio
                 loop = asyncio.new_event_loop()
                 asyncio.set_event_loop(loop)
                 
-                # Envoyer le message
-                future = asyncio.Future()
-                loop.create_task(send_message_async(channel, embed, future))
-                loop.run_until_complete(future)
-                
-                # Marquer comme livré dans la base de données
                 try:
-                    db = get_session_local()
-                    delivery = Delivery(
-                        id=str(uuid.uuid4()),
-                        guild_id=guild_id,
-                        channel_id=str(channel_id),
-                        cast_hash=cast_hash
-                    )
-                    db.add(delivery)
-                    db.commit()
-                    logger.info(f"✅ Livraison enregistrée pour {author_username}")
-                except Exception as e:
-                    logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
-                    if db:
-                        db.rollback()
+                    # Créer une coroutine pour envoyer le message
+                    async def send_message():
+                        await channel.send(embed=embed)
+                    
+                    # Exécuter la coroutine
+                    loop.run_until_complete(send_message())
+                    
+                    # Marquer comme livré dans la base de données
+                    try:
+                        db = get_session_local()()
+                        delivery = Delivery(
+                            id=str(uuid.uuid4()),
+                            guild_id=guild_id,
+                            channel_id=str(channel_id),
+                            cast_hash=cast_hash
+                        )
+                        db.add(delivery)
+                        db.commit()
+                        logger.info(f"✅ Livraison enregistrée pour {author_username}")
+                    except Exception as e:
+                        logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
+                        if db:
+                            db.rollback()
+                    finally:
+                        if db:
+                            db.close()
+                    
+                    logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
+                    
                 finally:
-                    if db:
-                        db.close()
-                
-                logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
+                    loop.close()
                 
             except Exception as e:
                 logger.error(f"❌ Erreur lors de l'envoi du message: {e}")
-            finally:
-                # Fermer l'event loop
-                try:
-                    loop.close()
-                except:
-                    pass
             
             # Marquer la tâche comme terminée
             discord_queue.task_done()
@@ -137,13 +138,7 @@ def discord_worker():
     
     logger.info("🛑 Worker Discord arrêté")
 
-async def send_message_async(channel, embed, future):
-    """Fonction asynchrone pour envoyer le message"""
-    try:
-        await channel.send(embed=embed)
-        future.set_result(True)
-    except Exception as e:
-        future.set_exception(e)
+
 
 def start_discord_worker():
     """Démarrer le worker thread Discord"""
