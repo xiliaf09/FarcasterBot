@@ -50,6 +50,11 @@ async def health_check():
     """Route de santé"""
     return {"status": "healthy", "service": "farcaster-tracker"}
 
+@app.get("/webhooks/neynar")
+async def webhook_health_check():
+    """Endpoint de validation pour Neynar - évite le 405 Method Not Allowed"""
+    return {"status": "ok", "message": "Webhook endpoint is active"}
+
 @app.post("/webhooks/neynar")
 async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
     """Endpoint pour recevoir les webhooks Neynar selon la structure officielle"""
