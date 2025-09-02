@@ -167,6 +167,7 @@ class NeynarClient:
     def create_webhook(self, url: str, author_fids: List[int] = None) -> Dict:
         """Créer un webhook Neynar selon la structure officielle"""
         payload = {
+            "name": "Farcaster Tracker Webhook",  # Champ requis par l'API
             "webhook_url": url,
             "subscription": {
                 "cast.created": {
@@ -181,6 +182,7 @@ class NeynarClient:
     def update_webhook(self, webhook_id: str, author_fids: List[int]) -> Dict:
         """Mettre à jour un webhook existant selon la structure officielle"""
         payload = {
+            "name": "Farcaster Tracker Webhook",  # Champ requis par l'API
             "subscription": {
                 "cast.created": {
                     "author_fids": author_fids
@@ -188,6 +190,7 @@ class NeynarClient:
             }
         }
         
+        logger.info(f"🔧 Mise à jour webhook avec payload: {payload}")
         return self._make_request(f"/v2/farcaster/webhook/{webhook_id}", method="PUT", data=payload)
     
     def delete_webhook(self, webhook_id: str) -> None:
