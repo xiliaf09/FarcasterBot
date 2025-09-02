@@ -386,6 +386,87 @@ async def test_neynar_command(ctx):
         logger.error(f"Erreur dans la commande test-neynar: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='lastcast')
+async def lastcast_command(ctx, fid_or_username: str):
+    """Commande pour récupérer le dernier cast d'un compte Farcaster"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        # Résoudre l'utilisateur Farcaster
+        try:
+            client = get_neynar_client()
+            if client is None:
+                await ctx.reply("❌ Erreur: Client Neynar non initialisé. Vérifiez la configuration.")
+                return
+                
+            user = client.resolve_user(fid_or_username)
+            if user is None:
+                await ctx.reply(f"❌ Impossible de résoudre l'utilisateur `{fid_or_username}`. Vérifiez que le FID ou le nom d'utilisateur est correct.")
+                return
+        except Exception as e:
+            await ctx.reply(f"❌ Erreur lors de la résolution de l'utilisateur: {str(e)}")
+            return
+        
+        # Récupérer le dernier cast
+        try:
+            # Utiliser get_user_feed pour récupérer le dernier cast
+            feed = client.get_user_feed(user['fid'], limit=1)
+            
+            if not feed.get("casts") or len(feed["casts"]) == 0:
+                await ctx.reply(f"📝 Aucun cast trouvé pour `{user['username']}` (FID: {user['fid']})")
+                return
+            
+            cast = feed["casts"][0]  # Le premier (le plus récent)
+            
+            # Créer un embed avec les détails du cast
+            embed = discord.Embed(
+                title=f"📝 Dernier Cast de @{user['username']}",
+                description=cast.get("text", "Aucun texte"),
+                color=0x6F4CFF,
+                timestamp=discord.utils.utcnow()
+            )
+            
+            # Ajouter les informations du cast
+            if cast.get("timestamp"):
+                embed.add_field(
+                    name="🕐 Publié le",
+                    value=f"<t:{cast['timestamp']}:F>",
+                    inline=True
+                )
+            
+            if cast.get("reactions"):
+                embed.add_field(
+                    name="❤️ Réactions",
+                    value=f"👍 {cast['reactions'].get('likes', 0)} | 🔄 {cast['reactions'].get('recasts', 0)} | 💬 {cast['reactions'].get('replies', 0)}",
+                    inline=True
+                )
+            
+            if cast.get("hash"):
+                embed.add_field(
+                    name="🔗 Hash du Cast",
+                    value=f"`{cast['hash']}`",
+                    inline=False
+                )
+            
+            # Ajouter l'image de profil de l'utilisateur
+            if user.get("pfp_url"):
+                embed.set_thumbnail(url=user["pfp_url"])
+            
+            embed.set_footer(text=f"FID: {user['fid']} • Farcaster Tracker Bot")
+            
+            await ctx.reply(embed=embed)
+            logger.info(f"Dernier cast récupéré pour {user['username']} (FID: {user['fid']}) par {ctx.author.name}")
+            
+        except Exception as e:
+            logger.error(f"Erreur lors de la récupération du cast: {e}")
+            await ctx.reply(f"❌ Erreur lors de la récupération du cast: {str(e)}")
+            
+    except Exception as e:
+        logger.error(f"Erreur dans la commande lastcast: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
@@ -401,6 +482,7 @@ async def far_help(ctx):
         `!track <fid_ou_username> [channel]` - Commencer à tracker un compte
         `!untrack <fid_ou_username>` - Arrêter de tracker un compte
         `!list` - Lister tous les comptes trackés
+        `!lastcast <fid_ou_username>` - Voir le dernier cast d'un compte
         """,
         inline=False
     )

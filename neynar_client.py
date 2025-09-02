@@ -168,7 +168,7 @@ class NeynarClient:
         """Créer un webhook Neynar selon la structure officielle"""
         payload = {
             "name": "Farcaster Tracker Webhook",  # Champ requis par l'API
-            "webhook_url": url,
+            "url": url,  # Correction: 'url' au lieu de 'webhook_url'
             "subscription": {
                 "cast.created": {
                     "author_fids": author_fids if author_fids else []
