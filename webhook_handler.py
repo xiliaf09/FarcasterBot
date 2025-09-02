@@ -196,26 +196,36 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                     channel_id = int(tracked_account.channel_id)
                     channel = bot.get_channel(channel_id)
                     
-                    if channel:
-                        await channel.send(embed=embed)
-                        
-                        # Marquer comme livré
+                    if channel and bot.is_ready():
                         try:
-                            delivery = Delivery(
-                                id=str(uuid.uuid4()),
-                                guild_id=tracked_account.guild_id,
-                                channel_id=tracked_account.channel_id,
-                                cast_hash=cast_hash
-                            )
-                            db.add(delivery)
+                            await channel.send(embed=embed)
                             
-                            sent_count += 1
-                            logger.info(f"✅ Notification envoyée dans {channel.name} pour {author['username']}")
+                            # Marquer comme livré
+                            try:
+                                delivery = Delivery(
+                                    id=str(uuid.uuid4()),
+                                    guild_id=tracked_account.guild_id,
+                                    channel_id=tracked_account.channel_id,
+                                    cast_hash=cast_hash
+                                )
+                                db.add(delivery)
+                                
+                                sent_count += 1
+                                logger.info(f"✅ Notification envoyée dans {channel.name} pour {author['username']}")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur lors de l'ajout de la livraison: {e}")
+                                # Continuer même si la livraison échoue
+                        except discord.errors.Forbidden:
+                            logger.error(f"❌ Permission refusée pour envoyer dans {channel.name}")
+                        except discord.errors.HTTPException as e:
+                            logger.error(f"❌ Erreur HTTP Discord: {e}")
                         except Exception as e:
-                            logger.error(f"❌ Erreur lors de l'ajout de la livraison: {e}")
-                            # Continuer même si la livraison échoue
+                            logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
                     else:
-                        logger.warning(f"⚠️ Canal {channel_id} non trouvé")
+                        if not bot.is_ready():
+                            logger.warning(f"⚠️ Bot Discord pas encore prêt")
+                        else:
+                            logger.warning(f"⚠️ Canal {channel_id} non trouvé")
                         
                 except ValueError as e:
                     logger.error(f"❌ Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
