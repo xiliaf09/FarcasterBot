@@ -3,7 +3,7 @@ from discord.ext import commands
 import logging
 import uuid
 from typing import Optional
-from database import SessionLocal, Guild, TrackedAccount, Delivery
+from database import get_session_local, Guild, TrackedAccount, Delivery
 from neynar_client import get_neynar_client
 from webhook_sync import sync_neynar_webhook
 from config import config
@@ -40,7 +40,7 @@ async def on_guild_join(guild):
         logger.info(f'Bot rejoint le serveur: {guild.name} (ID: {guild.id})')
         
         # Créer l'entrée de guild en base
-        db = SessionLocal()
+        db = get_session_local()()
         try:
             existing_guild = db.query(Guild).filter_by(id=guild.id).first()
             if not existing_guild:
@@ -97,7 +97,7 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
             return
         
         # Vérifier si le compte est déjà suivi dans ce salon
-        db = SessionLocal()
+        db = get_session_local()()
         try:
             existing = db.query(TrackedAccount).filter_by(
                 guild_id=ctx.guild.id,
@@ -162,7 +162,7 @@ async def untrack_command(ctx, fid_or_username: str):
             return
         
         # Supprimer le compte du suivi
-        db = SessionLocal()
+        db = get_session_local()()
         try:
             # Supprimer tous les suivis de ce compte dans cette guild
             deleted_count = db.query(TrackedAccount).filter_by(
@@ -199,7 +199,7 @@ async def list_command(ctx):
             await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
             return
         
-        db = SessionLocal()
+        db = get_session_local()()
         try:
             tracked_accounts = db.query(TrackedAccount).filter_by(guild_id=ctx.guild.id).all()
             
@@ -244,7 +244,7 @@ async def setchannel_command(ctx, channel: discord.TextChannel):
             await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
             return
         
-        db = SessionLocal()
+        db = get_session_local()()
         try:
             guild = db.query(Guild).filter_by(id=ctx.guild.id).first()
             if not guild:
