@@ -11,6 +11,7 @@ import discord
 import discord.utils
 from database import get_session_local, Delivery
 from config import config
+from discord_bot import bot
 
 # Configuration du logging
 logger = logging.getLogger(__name__)
