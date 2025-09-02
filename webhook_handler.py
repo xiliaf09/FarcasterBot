@@ -209,14 +209,17 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                                     logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
                                     return False
                             
-                            # Lancer dans un nouvel event loop
+                            # Utiliser run_coroutine_threadsafe pour éviter les conflits d'event loop
                             try:
-                                loop = asyncio.new_event_loop()
-                                asyncio.set_event_loop(loop)
-                                success = loop.run_until_complete(send_discord_message())
-                                loop.close()
+                                import concurrent.futures
+                                loop = asyncio.get_event_loop()
+                                future = asyncio.run_coroutine_threadsafe(send_discord_message(), loop)
+                                success = future.result(timeout=10)  # Timeout de 10 secondes
+                            except concurrent.futures.TimeoutError:
+                                logger.error("❌ Timeout lors de l'envoi Discord")
+                                success = False
                             except Exception as e:
-                                logger.error(f"❌ Erreur lors de la création de l'event loop: {e}")
+                                logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
                                 success = False
                             
                             if success:
