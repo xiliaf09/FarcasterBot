@@ -88,35 +88,44 @@ def discord_worker():
                         icon_url=author_info.get("icon_url", "")
                     )
                 
-                # Envoyer le message de manière synchrone avec asyncio.run()
+                # Envoyer le message de manière synchrone
                 try:
-                    async def send_message():
-                        await channel.send(embed=embed)
+                    # Utiliser la méthode synchrone de discord.py
+                    import asyncio
                     
-                    # Utiliser asyncio.run() qui gère correctement l'event loop
-                    asyncio.run(send_message())
+                    # Créer un nouvel event loop pour ce thread
+                    loop = asyncio.new_event_loop()
+                    asyncio.set_event_loop(loop)
                     
-                    # Marquer comme livré dans la base de données
                     try:
-                        db = get_session_local()()
-                        delivery = Delivery(
-                            id=str(uuid.uuid4()),
-                            guild_id=guild_id,
-                            channel_id=str(channel_id),
-                            cast_hash=cast_hash
-                        )
-                        db.add(delivery)
-                        db.commit()
-                        logger.info(f"✅ Livraison enregistrée pour {author_username}")
-                    except Exception as e:
-                        logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
-                        if db:
-                            db.rollback()
+                        # Exécuter la coroutine dans le nouvel event loop
+                        loop.run_until_complete(channel.send(embed=embed))
+                        
+                        # Marquer comme livré dans la base de données
+                        try:
+                            db = get_session_local()()
+                            delivery = Delivery(
+                                id=str(uuid.uuid4()),
+                                guild_id=guild_id,
+                                channel_id=str(channel_id),
+                                cast_hash=cast_hash
+                            )
+                            db.add(delivery)
+                            db.commit()
+                            logger.info(f"✅ Livraison enregistrée pour {author_username}")
+                        except Exception as e:
+                            logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
+                            if db:
+                                db.rollback()
+                        finally:
+                            if db:
+                                db.close()
+                        
+                        logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
+                        
                     finally:
-                        if db:
-                            db.close()
-                    
-                    logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
+                        # Fermer l'event loop
+                        loop.close()
                     
                 except Exception as e:
                     logger.error(f"❌ Erreur lors de l'envoi du message: {e}")
