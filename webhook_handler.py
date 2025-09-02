@@ -369,24 +369,31 @@ async def neynar_webhook(request: Request):
         
         # Récupérer les comptes trackés pour cet auteur
         from database import TrackedAccount
-        tracked_accounts = db.query(TrackedAccount).filter(
-            TrackedAccount.fid == str(author.get('fid'))
-        ).all()
         
-        if not tracked_accounts:
-            logger.info(f"ℹ️ Aucun compte tracké pour {author.get('username', 'Unknown')}")
-            return {"status": "ok", "message": "Aucun compte tracké"}
-        
-        # Vérifier si ce cast a déjà été livré
-        cast_hash = cast_data.get('hash', '')
-        if cast_hash:
-            existing_delivery = db.query(Delivery).filter(
-                Delivery.cast_hash == cast_hash
-            ).first()
+        # Créer une session DB manuellement
+        db = get_session_local()
+        try:
+            tracked_accounts = db.query(TrackedAccount).filter(
+                TrackedAccount.fid == str(author.get('fid'))
+            ).all()
             
-            if existing_delivery:
-                logger.info(f"ℹ️ Cast {cast_hash} déjà livré")
-                return {"status": "ok", "message": "Cast déjà livré"}
+            if not tracked_accounts:
+                logger.info(f"ℹ️ Aucun compte tracké pour {author.get('username', 'Unknown')}")
+                return {"status": "ok", "message": "Aucun compte tracké"}
+            
+            # Vérifier si ce cast a déjà été livré
+            cast_hash = cast_data.get('hash', '')
+            if cast_hash:
+                existing_delivery = db.query(Delivery).filter(
+                    Delivery.cast_hash == cast_hash
+                ).first()
+                
+                if existing_delivery:
+                    logger.info(f"ℹ️ Cast {cast_hash} déjà livré")
+                    return {"status": "ok", "message": "Cast déjà livré"}
+        
+        finally:
+            db.close()
         
         # Envoyer les notifications
         sent_count = 0
