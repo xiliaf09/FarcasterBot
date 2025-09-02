@@ -30,77 +30,124 @@ worker_running = False
 def discord_worker():
     """Worker thread pour envoyer les messages Discord de manière synchrone"""
     global worker_running
-    worker_running = True
+    
+    logger.info("🚀 Worker Discord démarré")
     
     while worker_running:
         try:
-            # Récupérer un message de la queue
-            message_data = discord_queue.get(timeout=1)
-            if message_data is None:  # Signal d'arrêt
-                break
-                
-            channel_id, embed_dict, author_username = message_data
-            
+            # Récupérer un message de la queue (timeout de 1 seconde)
             try:
-                # Récupérer le bot depuis le module principal
-                from main import bot
+                message_data = discord_queue.get(timeout=1)
+            except queue.Empty:
+                continue
+            
+            # Extraire les données du message
+            channel_id = message_data['channel_id']
+            embed_dict = message_data['embed']
+            author_username = message_data['author_username']
+            cast_hash = message_data['cast_hash']
+            guild_id = message_data['guild_id']
+            
+            logger.info(f"📤 Traitement du message pour {author_username} dans le canal {channel_id}")
+            
+            # Récupérer le canal
+            channel = bot.get_channel(channel_id)
+            if not channel:
+                logger.error(f"❌ Canal {channel_id} non trouvé")
+                continue
+            
+            # Envoyer le message
+            try:
+                # Créer l'embed Discord
+                embed = discord.Embed(
+                    title=embed_dict.get("title", "Nouveau Cast"),
+                    description=embed_dict.get("description", ""),
+                    color=embed_dict.get("color", 0x8B5CF6),
+                    url=embed_dict.get("url", "")
+                )
                 
-                if bot and bot.is_ready():
-                    channel = bot.get_channel(channel_id)
-                    if channel:
-                        # Créer l'embed Discord
-                        embed = discord.Embed(
-                            title=embed_dict.get("title", "Nouveau Cast"),
-                            description=embed_dict.get("description", ""),
-                            color=embed_dict.get("color", 0x8B5CF6),
-                            url=embed_dict.get("url", "")
+                if embed_dict.get("timestamp"):
+                    embed.timestamp = discord.utils.utcnow()
+                if embed_dict.get("footer"):
+                    embed.set_footer(text=embed_dict.get("footer", {}).get("text", ""))
+                if embed_dict.get("fields"):
+                    for field in embed_dict["fields"]:
+                        embed.add_field(
+                            name=field.get("name", ""), 
+                            value=field.get("value", ""), 
+                            inline=field.get("inline", True)
                         )
-                        
-                        if embed_dict.get("timestamp"):
-                            embed.timestamp = discord.utils.utcnow()
-                        if embed_dict.get("footer"):
-                            embed.set_footer(text=embed_dict.get("footer", {}).get("text", ""))
-                        if embed_dict.get("fields"):
-                            for field in embed_dict["fields"]:
-                                embed.add_field(
-                                    name=field.get("name", ""), 
-                                    value=field.get("value", ""), 
-                                    inline=field.get("inline", True)
-                                )
-                        if embed_dict.get("thumbnail"):
-                            embed.set_thumbnail(url=embed_dict["thumbnail"]["url"])
-                        if embed_dict.get("author"):
-                            author_info = embed_dict["author"]
-                            embed.set_author(
-                                name=author_info.get("name", ""), 
-                                url=author_info.get("url", ""), 
-                                icon_url=author_info.get("icon_url", "")
-                            )
-                        
-                        # Envoyer le message de manière synchrone
-                        channel.send(embed=embed)
-                        logger.info(f"✅ Message Discord envoyé dans {channel.name} pour {author_username}")
-                        
-                    else:
-                        logger.error(f"❌ Canal {channel_id} non trouvé")
-                else:
-                    logger.warning("⚠️ Bot Discord pas encore prêt")
-                    
+                if embed_dict.get("thumbnail"):
+                    embed.set_thumbnail(url=embed_dict["thumbnail"]["url"])
+                if embed_dict.get("author"):
+                    author_info = embed_dict["author"]
+                    embed.set_author(
+                        name=author_info.get("name", ""), 
+                        url=author_info.get("url", ""), 
+                        icon_url=author_info.get("icon_url", "")
+                    )
+                
+                # Créer un nouvel event loop dans le thread
+                loop = asyncio.new_event_loop()
+                asyncio.set_event_loop(loop)
+                
+                # Envoyer le message
+                future = asyncio.Future()
+                loop.create_task(send_message_async(channel, embed, future))
+                loop.run_until_complete(future)
+                
+                # Marquer comme livré dans la base de données
+                try:
+                    db = get_session_local()
+                    delivery = Delivery(
+                        id=str(uuid.uuid4()),
+                        guild_id=guild_id,
+                        channel_id=str(channel_id),
+                        cast_hash=cast_hash
+                    )
+                    db.add(delivery)
+                    db.commit()
+                    logger.info(f"✅ Livraison enregistrée pour {author_username}")
+                except Exception as e:
+                    logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
+                    if db:
+                        db.rollback()
+                finally:
+                    if db:
+                        db.close()
+                
+                logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
+                
             except Exception as e:
-                logger.error(f"❌ Erreur lors de l'envoi Discord pour {author_username}: {e}")
-                
+                logger.error(f"❌ Erreur lors de l'envoi du message: {e}")
             finally:
-                discord_queue.task_done()
-                
-        except queue.Empty:
-            continue
+                # Fermer l'event loop
+                try:
+                    loop.close()
+                except:
+                    pass
+            
+            # Marquer la tâche comme terminée
+            discord_queue.task_done()
+            
         except Exception as e:
             logger.error(f"❌ Erreur dans le worker Discord: {e}")
-            time.sleep(1)
+            time.sleep(1)  # Pause en cas d'erreur
+    
+    logger.info("🛑 Worker Discord arrêté")
+
+async def send_message_async(channel, embed, future):
+    """Fonction asynchrone pour envoyer le message"""
+    try:
+        await channel.send(embed=embed)
+        future.set_result(True)
+    except Exception as e:
+        future.set_exception(e)
 
 def start_discord_worker():
     """Démarrer le worker thread Discord"""
-    global worker_thread
+    global worker_thread, worker_running
+    worker_running = True
     if worker_thread is None or not worker_thread.is_alive():
         worker_thread = threading.Thread(target=discord_worker, daemon=True)
         worker_thread.start()
@@ -111,7 +158,6 @@ def stop_discord_worker():
     global worker_running, worker_thread
     worker_running = False
     if worker_thread:
-        discord_queue.put(None)  # Signal d'arrêt
         worker_thread.join(timeout=5)
         logger.info("🛑 Worker Discord arrêté")
 
@@ -348,35 +394,37 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_session_loc
             try:
                 # Convertir le channel_id en int de manière sécurisée
                 channel_id = int(tracked_account.channel_id)
+                channel = bot.get_channel(channel_id)
                 
-                # Ajouter le message à la queue Discord
-                discord_queue.put((channel_id, embed_dict, author.get('username', 'Unknown')))
-                sent_count += 1
-                logger.info(f"📤 Message ajouté à la queue pour {author.get('username', 'Unknown')}")
-                
+                if channel and bot.is_ready():
+                    try:
+                        # Ajouter le message à la queue Discord
+                        discord_queue.put({
+                            'channel_id': channel_id,
+                            'embed': embed_dict,
+                            'author_username': author.get('username', 'Unknown'),
+                            'cast_hash': cast_hash,
+                            'guild_id': tracked_account.guild_id
+                        })
+                        
+                        logger.info(f"✅ Message ajouté à la queue pour {channel.name}")
+                        sent_count += 1
+                        
+                    except Exception as e:
+                        logger.error(f"❌ Erreur lors de l'ajout à la queue: {e}")
+                else:
+                    if not bot.is_ready():
+                        logger.warning(f"⚠️ Bot Discord pas encore prêt")
+                    else:
+                        logger.warning(f"⚠️ Canal {channel_id} non trouvé")
+                        
             except ValueError as e:
                 logger.error(f"❌ Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
             except Exception as e:
-                logger.error(f"❌ Erreur lors de l'ajout à la queue pour {author.get('username', 'Unknown')}: {e}")
+                logger.error(f"❌ Erreur lors de l'envoi de la notification pour {author.get('username', 'Unknown')}: {e}")
         
-        # Marquer comme livré dans la base
-        if sent_count > 0 and cast_hash:
-            try:
-                delivery = Delivery(
-                    id=str(uuid.uuid4()),
-                    guild_id=tracked_accounts[0].guild_id,
-                    channel_id=tracked_accounts[0].channel_id,
-                    cast_hash=cast_hash
-                )
-                db.add(delivery)
-                db.commit()
-                logger.info(f"✅ Livraison enregistrée pour {author.get('username', 'Unknown')}")
-            except Exception as e:
-                logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
-                db.rollback()
-        
-        logger.info(f"✅ {sent_count} notification(s) ajoutée(s) à la queue pour {author.get('username', 'Unknown')}")
-        return {"status": "ok", "sent_count": sent_count}
+        logger.info(f"✅ {sent_count} notification(s) ajoutée(s) à la queue")
+        return {"status": "success", "sent_count": sent_count}
         
     except HTTPException:
         raise
