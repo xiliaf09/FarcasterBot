@@ -199,7 +199,7 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                     
                     if channel and bot.is_ready():
                         try:
-                            # Créer une tâche asynchrone pour l'envoi Discord
+                            # Créer une fonction asynchrone pour l'envoi Discord
                             async def send_discord_message():
                                 try:
                                     await channel.send(embed=embed)
@@ -209,9 +209,15 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                                     logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
                                     return False
                             
-                            # Lancer la tâche et attendre le résultat
-                            task = asyncio.create_task(send_discord_message())
-                            success = await task
+                            # Lancer dans un nouvel event loop
+                            try:
+                                loop = asyncio.new_event_loop()
+                                asyncio.set_event_loop(loop)
+                                success = loop.run_until_complete(send_discord_message())
+                                loop.close()
+                            except Exception as e:
+                                logger.error(f"❌ Erreur lors de la création de l'event loop: {e}")
+                                success = False
                             
                             if success:
                                 # Marquer comme livré
