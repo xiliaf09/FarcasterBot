@@ -90,42 +90,43 @@ def discord_worker():
                 
                 # Envoyer le message de manière synchrone
                 try:
-                    # Utiliser la méthode synchrone de discord.py
-                    import asyncio
+                    # SOLUTION RADICALE : Utiliser bot.loop.call_soon_threadsafe
+                    # Cette méthode est la SEULE qui fonctionne avec discord.py dans un thread
                     
-                    # Créer un nouvel event loop pour ce thread
-                    loop = asyncio.new_event_loop()
-                    asyncio.set_event_loop(loop)
-                    
-                    try:
-                        # Exécuter la coroutine dans le nouvel event loop
-                        loop.run_until_complete(channel.send(embed=embed))
-                        
-                        # Marquer comme livré dans la base de données
+                    async def send_message_and_save():
                         try:
-                            db = get_session_local()()
-                            delivery = Delivery(
-                                id=str(uuid.uuid4()),
-                                guild_id=guild_id,
-                                channel_id=str(channel_id),
-                                cast_hash=cast_hash
-                            )
-                            db.add(delivery)
-                            db.commit()
-                            logger.info(f"✅ Livraison enregistrée pour {author_username}")
+                            # Envoyer le message
+                            await channel.send(embed=embed)
+                            
+                            # Marquer comme livré dans la base de données
+                            try:
+                                db = get_session_local()()
+                                delivery = Delivery(
+                                    id=str(uuid.uuid4()),
+                                    guild_id=guild_id,
+                                    channel_id=str(channel_id),
+                                    cast_hash=cast_hash
+                                )
+                                db.add(delivery)
+                                db.commit()
+                                logger.info(f"✅ Livraison enregistrée pour {author_username}")
+                            except Exception as e:
+                                logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
+                                if db:
+                                    db.rollback()
+                            finally:
+                                if db:
+                                    db.close()
+                            
+                            logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
+                            
                         except Exception as e:
-                            logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
-                            if db:
-                                db.rollback()
-                        finally:
-                            if db:
-                                db.close()
-                        
-                        logger.info(f"✅ Message envoyé avec succès dans {channel.name}")
-                        
-                    finally:
-                        # Fermer l'event loop
-                        loop.close()
+                            logger.error(f"❌ Erreur dans send_message_and_save: {e}")
+                    
+                    # Utiliser call_soon_threadsafe pour exécuter la coroutine sur le loop principal du bot
+                    bot.loop.call_soon_threadsafe(
+                        lambda: asyncio.create_task(send_message_and_save())
+                    )
                     
                 except Exception as e:
                     logger.error(f"❌ Erreur lors de l'envoi du message: {e}")
