@@ -34,25 +34,39 @@ def sync_neynar_webhook():
                 logger.info("Aucun état de webhook trouvé, création d'un nouveau webhook...")
                 
                 try:
+                    logger.info("🔧 Tentative de création du webhook...")
                     webhook = get_neynar_client().create_webhook(
                         f"{config.PUBLIC_BASE_URL}/webhooks/neynar",
                         all_fids
                     )
                     
+                    logger.info(f"🔧 Réponse de création webhook: {webhook}")
+                    
+                    # Vérifier que la réponse contient un ID
+                    if not webhook or "id" not in webhook:
+                        logger.error(f"❌ Réponse invalide de l'API Neynar: {webhook}")
+                        logger.error("❌ La réponse ne contient pas de champ 'id'")
+                        return
+                    
+                    webhook_id = webhook["id"]
+                    logger.info(f"✅ Webhook ID extrait: {webhook_id}")
+                    
                     webhook_state = WebhookState(
                         id="singleton",
-                        webhook_id=webhook["id"],
+                        webhook_id=webhook_id,
                         active=webhook.get("active", True),
                         author_fids=json.dumps(all_fids)
                     )
                     db.add(webhook_state)
                     db.commit()
                     
-                    logger.info(f"Nouveau webhook Neynar créé: {webhook['id']}")
+                    logger.info(f"✅ Nouveau webhook Neynar créé: {webhook_id}")
                     
                 except Exception as e:
-                    logger.error(f"Erreur lors de la création du webhook: {e}")
-                    # Ne pas lever l'exception, juste logger l'erreur
+                    logger.error(f"❌ Erreur lors de la création du webhook: {e}")
+                    logger.error(f"❌ Type d'erreur: {type(e).__name__}")
+                    import traceback
+                    logger.error(f"❌ Traceback: {traceback.format_exc()}")
                     return
                     
             else:

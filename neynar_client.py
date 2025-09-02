@@ -88,9 +88,14 @@ class NeynarClient:
                 elif method == "PUT":
                     response = requests.put(url, headers=self.headers, json=data, timeout=30)
                 elif method == "DELETE":
-                    response = requests.delete(url, headers=self.headers, timeout=30)
+                    response = requests.delete(url, headers=self.headers, json=data, timeout=30)
                 else:
                     raise ValueError(f"Méthode HTTP non supportée: {method}")
+                
+                # Log de la réponse complète pour debug
+                logger.info(f"🔧 Status Code: {response.status_code}")
+                logger.info(f"🔧 Headers: {dict(response.headers)}")
+                logger.info(f"🔧 Response Text: {response.text}")
                 
                 # Gestion des codes d'erreur selon la documentation
                 if response.status_code == 429:  # Rate limit
@@ -112,7 +117,16 @@ class NeynarClient:
                     raise ValueError(f"Requête invalide: {response.text}")
                 
                 response.raise_for_status()
-                return response.json()
+                
+                # Parser la réponse JSON avec gestion d'erreur
+                try:
+                    response_data = response.json()
+                    logger.info(f"🔧 Response JSON: {response_data}")
+                    return response_data
+                except json.JSONDecodeError as e:
+                    logger.error(f"Erreur de parsing JSON: {e}")
+                    logger.error(f"Response text: {response.text}")
+                    raise ValueError(f"Réponse invalide (non-JSON): {response.text}")
                 
             except requests.exceptions.RequestException as e:
                 if attempt < retries - 1:
