@@ -166,6 +166,11 @@ class NeynarClient:
     
     def create_webhook(self, url: str, author_fids: List[int] = None) -> Dict:
         """Créer un webhook Neynar selon la structure officielle"""
+        # S'assurer que l'URL commence par http:// ou https://
+        if not url.startswith(('http://', 'https://')):
+            url = f"https://{url}"
+            logger.info(f"🔧 URL corrigée: {url}")
+        
         payload = {
             "name": "Farcaster Tracker Webhook",  # Champ requis par l'API
             "url": url,  # Correction: 'url' au lieu de 'webhook_url'
