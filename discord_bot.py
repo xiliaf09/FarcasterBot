@@ -42,9 +42,9 @@ async def on_guild_join(guild):
         # Créer l'entrée de guild en base
         db = get_session_local()()
         try:
-            existing_guild = db.query(Guild).filter_by(id=guild.id).first()
+            existing_guild = db.query(Guild).filter_by(id=str(guild.id)).first()
             if not existing_guild:
-                new_guild = Guild(id=guild.id)
+                new_guild = Guild(id=str(guild.id))
                 db.add(new_guild)
                 db.commit()
                 logger.info(f"Guild {guild.name} ajoutée à la base de données")
@@ -100,8 +100,8 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
         db = get_session_local()()
         try:
             existing = db.query(TrackedAccount).filter_by(
-                guild_id=ctx.guild.id,
-                channel_id=target_channel.id,
+                guild_id=str(ctx.guild.id),
+                channel_id=str(target_channel.id),
                 fid=user['fid']
             ).first()
             
@@ -112,11 +112,11 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
             # Ajouter le compte au suivi
             tracked_account = TrackedAccount(
                 id=str(uuid.uuid4()),
-                guild_id=ctx.guild.id,
-                channel_id=target_channel.id,
+                guild_id=str(ctx.guild.id),
+                channel_id=str(target_channel.id),
                 fid=user['fid'],
                 username=user['username'],
-                added_by_discord_user_id=ctx.author.id
+                added_by_discord_user_id=str(ctx.author.id)
             )
             
             db.add(tracked_account)
@@ -166,7 +166,7 @@ async def untrack_command(ctx, fid_or_username: str):
         try:
             # Supprimer tous les suivis de ce compte dans cette guild
             deleted_count = db.query(TrackedAccount).filter_by(
-                guild_id=ctx.guild.id,
+                guild_id=str(ctx.guild.id),
                 fid=user['fid']
             ).delete()
             
@@ -201,7 +201,7 @@ async def list_command(ctx):
         
         db = get_session_local()()
         try:
-            tracked_accounts = db.query(TrackedAccount).filter_by(guild_id=ctx.guild.id).all()
+            tracked_accounts = db.query(TrackedAccount).filter_by(guild_id=str(ctx.guild.id)).all()
             
             if not tracked_accounts:
                 await ctx.reply("📋 Aucun compte Farcaster n'est suivi dans ce serveur.")
@@ -246,12 +246,12 @@ async def setchannel_command(ctx, channel: discord.TextChannel):
         
         db = get_session_local()()
         try:
-            guild = db.query(Guild).filter_by(id=ctx.guild.id).first()
+            guild = db.query(Guild).filter_by(id=str(ctx.guild.id)).first()
             if not guild:
-                guild = Guild(id=ctx.guild.id)
+                guild = Guild(id=str(ctx.guild.id))
                 db.add(guild)
             
-            guild.default_channel_id = channel.id
+            guild.default_channel_id = str(channel.id)
             db.commit()
             
             await ctx.reply(f"✅ Salon par défaut défini sur {channel.mention} !")
