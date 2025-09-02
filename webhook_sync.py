@@ -90,6 +90,30 @@ def sync_neynar_webhook():
                 current_fids.sort()
                 new_fids = sorted(all_fids)
                 
+                # Vérifier d'abord si le webhook existe toujours côté Neynar
+                try:
+                    webhook_details = get_neynar_client().get_webhook(webhook_state.webhook_id)
+                    if not webhook_details or not webhook_details.get("active"):
+                        logger.warning("⚠️ Webhook inactif ou introuvable côté Neynar, tentative de récupération...")
+                        # Le webhook existe mais est inactif, on essaie de le réactiver
+                        try:
+                            # Réactiver le webhook avec les FIDs actuels
+                            reactivated_webhook = get_neynar_client().update_webhook(
+                                webhook_state.webhook_id,
+                                all_fids
+                            )
+                            logger.info(f"✅ Webhook réactivé: {webhook_state.webhook_id}")
+                            # Mettre à jour l'état local
+                            webhook_state.author_fids = json.dumps(all_fids)
+                            webhook_state.updated_at = time.time()
+                            db.commit()
+                        except Exception as reactivate_error:
+                            logger.error(f"❌ Impossible de réactiver le webhook: {reactivate_error}")
+                            # On continue avec l'état local existant
+                except Exception as check_error:
+                    logger.warning(f"⚠️ Impossible de vérifier l'état du webhook: {check_error}")
+                    # On continue avec l'état local existant
+                
                 if current_fids != new_fids:
                     logger.info(f"FIDs modifiés, mise à jour du webhook... Anciens: {current_fids}, Nouveaux: {new_fids}")
                     
@@ -109,40 +133,17 @@ def sync_neynar_webhook():
                         
                     except Exception as e:
                         logger.error(f"Erreur lors de la mise à jour du webhook: {e}")
-                        # Si le webhook n'existe plus côté Neynar (404), le recréer proprement
+                        # STRATÉGIE CONSERVATIVE : Ne JAMAIS recréer le webhook
+                        # Si erreur, on garde l'ancien état et on log l'erreur
                         error_message = str(e).lower()
                         if "404" in error_message or "not found" in error_message:
-                            logger.warning("Webhook introuvable côté Neynar. Suppression de l'état local et recréation...")
-                            try:
-                                # Supprimer l'état local existant
-                                db.delete(webhook_state)
-                                db.commit()
-                                # Créer un nouveau webhook avec les FIDs actuels
-                                new_webhook = get_neynar_client().create_webhook(
-                                    build_webhook_url(config.PUBLIC_BASE_URL),
-                                    all_fids
-                                )
-                                if not new_webhook or "webhook" not in new_webhook or "webhook_id" not in new_webhook["webhook"]:
-                                    logger.error(f"❌ Réponse invalide lors de la recréation: {new_webhook}")
-                                    return
-                                new_id = new_webhook["webhook"]["webhook_id"]
-                                logger.info(f"✅ Nouveau webhook recréé avec l'ID: {new_id}")
-                                # Enregistrer le nouvel état
-                                new_state = WebhookState(
-                                    id="singleton",
-                                    webhook_id=new_id,
-                                    active=new_webhook.get("active", True),
-                                    author_fids=json.dumps(all_fids)
-                                )
-                                db.add(new_state)
-                                db.commit()
-                                logger.info("✅ État du webhook recréé et synchronisé")
-                            except Exception as recreate_error:
-                                logger.error(f"❌ Échec de la recréation du webhook après 404: {recreate_error}")
-                                return
+                            logger.warning("⚠️ Webhook introuvable côté Neynar, mais on NE LE RECRÉE PAS")
+                            logger.warning("⚠️ On garde l'état local pour éviter la perte de connexion")
+                            logger.warning("⚠️ Le webhook sera récupéré au prochain redémarrage du bot")
+                            # On ne fait RIEN, on garde l'état local
                         else:
-                            # Ne pas lever l'exception, juste logger l'erreur
-                            return
+                            logger.warning("⚠️ Erreur de mise à jour, mais on garde l'état existant")
+                            # On ne fait RIEN, on garde l'état local
                 else:
                     logger.info("Aucun changement de FIDs détecté, webhook à jour")
             
@@ -260,3 +261,107 @@ def get_webhook_stats():
         import traceback
         logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return {"status": "error", "message": str(e)}
+
+def add_fids_to_webhook(new_fids: List[str]):
+    """Ajouter des FIDs au webhook existant SANS le recréer"""
+    try:
+        logger.info(f"🔧 Tentative d'ajout de FIDs au webhook existant: {new_fids}")
+        
+        db = get_session_local()()
+        try:
+            webhook_state = db.query(WebhookState).filter_by(id="singleton").first()
+            
+            if not webhook_state:
+                logger.warning("⚠️ Aucun webhook existant, impossible d'ajouter des FIDs")
+                return False
+            
+            # Récupérer les FIDs actuels
+            current_fids = json.loads(webhook_state.author_fids)
+            logger.info(f"🔧 FIDs actuels: {current_fids}")
+            
+            # Ajouter les nouveaux FIDs (sans doublons)
+            updated_fids = list(set(current_fids + new_fids))
+            logger.info(f"🔧 FIDs mis à jour: {updated_fids}")
+            
+            if updated_fids == current_fids:
+                logger.info("✅ Aucun nouveau FID à ajouter")
+                return True
+            
+            # Mettre à jour le webhook côté Neynar
+            try:
+                updated_webhook = get_neynar_client().update_webhook(
+                    webhook_state.webhook_id,
+                    updated_fids
+                )
+                
+                # Mettre à jour l'état local
+                webhook_state.author_fids = json.dumps(updated_fids)
+                webhook_state.updated_at = time.time()
+                db.commit()
+                
+                logger.info(f"✅ FIDs ajoutés au webhook: {webhook_state.webhook_id}")
+                return True
+                
+            except Exception as update_error:
+                logger.error(f"❌ Erreur lors de la mise à jour du webhook: {update_error}")
+                logger.warning("⚠️ On garde l'état local existant pour éviter la perte de connexion")
+                return False
+                
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur lors de l'ajout des FIDs: {e}")
+        return False
+
+def remove_fids_from_webhook(fids_to_remove: List[str]):
+    """Retirer des FIDs du webhook existant SANS le recréer"""
+    try:
+        logger.info(f"🔧 Tentative de retrait de FIDs du webhook existant: {fids_to_remove}")
+        
+        db = get_session_local()()
+        try:
+            webhook_state = db.query(WebhookState).filter_by(id="singleton").first()
+            
+            if not webhook_state:
+                logger.warning("⚠️ Aucun webhook existant, impossible de retirer des FIDs")
+                return False
+            
+            # Récupérer les FIDs actuels
+            current_fids = json.loads(webhook_state.author_fids)
+            logger.info(f"🔧 FIDs actuels: {current_fids}")
+            
+            # Retirer les FIDs spécifiés
+            updated_fids = [fid for fid in current_fids if fid not in fids_to_remove]
+            logger.info(f"🔧 FIDs mis à jour: {updated_fids}")
+            
+            if updated_fids == current_fids:
+                logger.info("✅ Aucun FID à retirer")
+                return True
+            
+            # Mettre à jour le webhook côté Neynar
+            try:
+                updated_webhook = get_neynar_client().update_webhook(
+                    webhook_state.webhook_id,
+                    updated_fids
+                )
+                
+                # Mettre à jour l'état local
+                webhook_state.author_fids = json.dumps(updated_fids)
+                webhook_state.updated_at = time.time()
+                db.commit()
+                
+                logger.info(f"✅ FIDs retirés du webhook: {webhook_state.webhook_id}")
+                return True
+                
+            except Exception as update_error:
+                logger.error(f"❌ Erreur lors de la mise à jour du webhook: {update_error}")
+                logger.warning("⚠️ On garde l'état local existant pour éviter la perte de connexion")
+                return False
+                
+        finally:
+            db.close()
+            
+    except Exception as e:
+        logger.error(f"❌ Erreur lors du retrait des FIDs: {e}")
+        return False
