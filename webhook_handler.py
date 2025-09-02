@@ -325,13 +325,17 @@ async def admin_webhook_test():
 async def admin_neynar_rate_limits():
     """Route admin pour vérifier les rate limits Neynar"""
     try:
-        from neynar_client import neynar_client
+        from neynar_client import get_neynar_client
+        client = get_neynar_client()
+        if client is None:
+            raise HTTPException(status_code=500, detail="Client Neynar non initialisé")
+        
         return {
             "status": "success",
-            "current_plan": neynar_client.current_plan,
-            "rate_limits": neynar_client.rate_limits[neynar_client.current_plan],
-            "requests_this_minute": neynar_client.requests_this_minute,
-            "last_request_time": neynar_client.last_request_time
+            "current_plan": client.current_plan,
+            "rate_limits": client.rate_limits[client.current_plan],
+            "requests_this_minute": client.requests_this_minute,
+            "last_request_time": client.last_request_time
         }
     except Exception as e:
         logger.error(f"Erreur lors de la récupération des rate limits: {e}")
@@ -341,12 +345,16 @@ async def admin_neynar_rate_limits():
 async def admin_set_plan(plan: str):
     """Route admin pour changer le plan de rate limits"""
     try:
-        from neynar_client import neynar_client
-        neynar_client.set_plan(plan)
+        from neynar_client import get_neynar_client
+        client = get_neynar_client()
+        if client is None:
+            raise HTTPException(status_code=500, detail="Client Neynar non initialisé")
+        
+        client.set_plan(plan)
         return {
             "status": "success",
             "message": f"Plan défini sur: {plan}",
-            "new_plan": neynar_client.current_plan
+            "new_plan": client.current_plan
         }
     except Exception as e:
         logger.error(f"Erreur lors du changement de plan: {e}")

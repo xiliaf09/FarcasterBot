@@ -3,7 +3,7 @@ import logging
 import time
 from typing import List
 from database import SessionLocal, WebhookState, TrackedAccount
-from neynar_client import neynar_client
+from neynar_client import get_neynar_client
 from config import config
 
 logger = logging.getLogger(__name__)
@@ -14,7 +14,7 @@ def sync_neynar_webhook():
         logger.info("Début de la synchronisation du webhook Neynar...")
         
         # Vérifier que le client Neynar est disponible
-        if not neynar_client or not hasattr(neynar_client, 'create_webhook'):
+        if not get_neynar_client() or not hasattr(get_neynar_client(), 'create_webhook'):
             logger.error("Client Neynar non disponible ou invalide")
             return
         
@@ -34,7 +34,7 @@ def sync_neynar_webhook():
                 logger.info("Aucun état de webhook trouvé, création d'un nouveau webhook...")
                 
                 try:
-                    webhook = neynar_client.create_webhook(
+                    webhook = get_neynar_client().create_webhook(
                         f"{config.PUBLIC_BASE_URL}/webhooks/neynar",
                         all_fids
                     )
@@ -66,7 +66,7 @@ def sync_neynar_webhook():
                     
                     try:
                         # Mettre à jour le webhook existant selon la structure officielle
-                        updated_webhook = neynar_client.update_webhook(
+                        updated_webhook = get_neynar_client().update_webhook(
                             webhook_state.webhook_id,
                             all_fids
                         )
@@ -109,7 +109,7 @@ def cleanup_webhook():
         webhook_state = get_webhook_state()
         if webhook_state:
             try:
-                neynar_client.delete_webhook(webhook_state.webhook_id)
+                get_neynar_client().delete_webhook(webhook_state.webhook_id)
                 logger.info(f"Webhook Neynar {webhook_state.webhook_id} supprimé")
                 
                 db = SessionLocal()
@@ -136,7 +136,7 @@ def test_webhook_connection():
             return False
         
         # Tester la récupération des détails du webhook
-        webhook_details = neynar_client.get_webhook(webhook_state.webhook_id)
+        webhook_details = get_neynar_client().get_webhook(webhook_state.webhook_id)
         
         if webhook_details.get("active"):
             logger.info("✅ Webhook Neynar actif et accessible")
@@ -156,7 +156,7 @@ def get_webhook_stats():
         if not webhook_state:
             return {"status": "no_webhook"}
         
-        webhook_details = neynar_client.get_webhook(webhook_state.webhook_id)
+        webhook_details = get_neynar_client().get_webhook(webhook_state.webhook_id)
         
         return {
             "status": "active" if webhook_details.get("active") else "inactive",

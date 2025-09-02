@@ -4,7 +4,7 @@ import logging
 import uuid
 from typing import Optional
 from database import SessionLocal, Guild, TrackedAccount, Delivery
-from neynar_client import neynar_client
+from neynar_client import get_neynar_client
 from webhook_sync import sync_neynar_webhook
 from config import config
 
@@ -69,7 +69,7 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
         
         # Résoudre l'utilisateur Farcaster
         try:
-            user = neynar_client.resolve_user(fid_or_username)
+            user = get_neynar_client().resolve_user(fid_or_username)
         except Exception as e:
             await ctx.reply(f"❌ Erreur lors de la résolution de l'utilisateur: {str(e)}")
             return
@@ -127,11 +127,11 @@ async def untrack_command(ctx, fid_or_username: str):
         
         # Résoudre l'utilisateur Farcaster
         try:
-            if neynar_client is None:
+            if get_neynar_client() is None:
                 await ctx.reply("❌ Erreur: Client Neynar non initialisé. Vérifiez la configuration.")
                 return
                 
-            user = neynar_client.resolve_user(fid_or_username)
+            user = get_neynar_client().resolve_user(fid_or_username)
             if user is None:
                 await ctx.reply(f"❌ Impossible de résoudre l'utilisateur `{fid_or_username}`. Vérifiez que le FID ou le nom d'utilisateur est correct.")
                 return
@@ -292,7 +292,7 @@ async def test_neynar_command(ctx):
         
         # Test 2: Test de résolution d'utilisateur
         try:
-            user = neynar_client.resolve_user("dwr")
+            user = get_neynar_client().resolve_user("dwr")
             embed.add_field(
                 name="2️⃣ Résolution Utilisateur",
                 value=f"✅ @{user['username']} (FID: {user['fid']})",

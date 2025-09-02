@@ -201,5 +201,27 @@ class NeynarClient:
         else:
             logger.warning(f"Plan invalide: {plan}. Plans disponibles: {list(self.rate_limits.keys())}")
 
-# Instance globale du client
-neynar_client = NeynarClient()
+# Instance globale du client (initialisation différée)
+_neynar_client_instance = None
+
+def get_neynar_client():
+    """Obtenir l'instance du client Neynar avec initialisation différée"""
+    global _neynar_client_instance
+    
+    if _neynar_client_instance is None:
+        try:
+            # Vérifier que la configuration est valide
+            if not hasattr(config, 'NEYNAR_API_KEY') or not config.NEYNAR_API_KEY:
+                logger.error("NEYNAR_API_KEY non configurée")
+                return None
+            
+            _neynar_client_instance = NeynarClient()
+            logger.info("Client Neynar initialisé avec succès")
+        except Exception as e:
+            logger.error(f"Erreur lors de l'initialisation du client Neynar: {e}")
+            return None
+    
+    return _neynar_client_instance
+
+# Alias pour la compatibilité
+neynar_client = get_neynar_client()
