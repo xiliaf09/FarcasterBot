@@ -144,8 +144,11 @@ async def untrack_command(ctx, fid_or_username: str):
             if deleted_count > 0:
                 db.commit()
                 
-                # Synchroniser le webhook Neynar
-                sync_neynar_webhook()
+                # Synchroniser le webhook Neynar (désactivé temporairement)
+                # try:
+                #     sync_neynar_webhook()
+                # except Exception as e:
+                #     logger.error(f"Erreur lors de la synchronisation webhook: {e}")
                 
                 await ctx.reply(f"✅ Compte Farcaster `{user['username']}` (FID: {user['fid']}) supprimé du suivi !")
                 logger.info(f"Compte Farcaster {user['username']} (FID: {user['fid']}) supprimé du tracking dans {ctx.guild.name}")
@@ -328,10 +331,10 @@ async def test_neynar_command(ctx):
         # Test 4: Test de synchronisation
         try:
             from webhook_sync import sync_neynar_webhook
-            sync_neynar_webhook()
+            # sync_neynar_webhook()  # Désactivé temporairement
             embed.add_field(
                 name="4️⃣ Synchronisation",
-                value="✅ Synchronisation réussie",
+                value="⚠️ Synchronisation désactivée temporairement",
                 inline=False
             )
         except Exception as e:

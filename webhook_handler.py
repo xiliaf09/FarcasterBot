@@ -290,8 +290,8 @@ async def admin_resync():
     """Route admin pour forcer la resynchronisation du webhook (dev only)"""
     try:
         from webhook_sync import sync_neynar_webhook
-        sync_neynar_webhook()
-        return {"status": "success", "message": "Webhook resynchronisé"}
+        # sync_neynar_webhook()  # Désactivé temporairement
+        return {"status": "success", "message": "Webhook resynchronisation désactivée temporairement"}
     except Exception as e:
         logger.error(f"Erreur lors de la resynchronisation: {e}")
         raise HTTPException(status_code=500, detail=str(e))
