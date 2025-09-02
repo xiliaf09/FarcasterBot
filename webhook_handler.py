@@ -133,8 +133,6 @@ def discord_worker():
     
     logger.info("🛑 Worker Discord arrêté")
 
-
-
 def start_discord_worker():
     """Démarrer le worker thread Discord"""
     global worker_thread, worker_running
