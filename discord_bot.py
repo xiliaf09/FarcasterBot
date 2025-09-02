@@ -423,7 +423,7 @@ async def lastcast_command(ctx, fid_or_username: str):
             # Créer un embed avec les détails du cast
             embed = discord.Embed(
                 title=f"📝 Dernier Cast de @{user['username']}",
-                description=cast.get("text", "Aucun texte"),
+                description=f"**{cast.get('text', 'Aucun texte')}**",
                 color=0x6F4CFF,
                 timestamp=discord.utils.utcnow()
             )
@@ -433,20 +433,15 @@ async def lastcast_command(ctx, fid_or_username: str):
                 embed.add_field(
                     name="🕐 Publié le",
                     value=f"<t:{cast['timestamp']}:F>",
-                    inline=True
+                    inline=False
                 )
             
-            if cast.get("reactions"):
-                embed.add_field(
-                    name="❤️ Réactions",
-                    value=f"👍 {cast['reactions'].get('likes', 0)} | 🔄 {cast['reactions'].get('recasts', 0)} | 💬 {cast['reactions'].get('replies', 0)}",
-                    inline=True
-                )
-            
+            # Ajouter le lien direct vers le cast
             if cast.get("hash"):
+                cast_url = f"https://warpcast.com/{user['username']}/{cast['hash']}"
                 embed.add_field(
-                    name="🔗 Hash du Cast",
-                    value=f"`{cast['hash']}`",
+                    name="🔗 Voir le Cast",
+                    value=f"[Cliquer ici pour voir sur Warpcast]({cast_url})",
                     inline=False
                 )
             
