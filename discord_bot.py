@@ -26,12 +26,13 @@ async def on_ready():
     logger.info(f'ID du bot: {bot.user.id}')
     logger.info(f'Serveurs connectés: {len(bot.guilds)}')
     
-    # Synchroniser le webhook au démarrage (désactivé temporairement)
-    # try:
-    #     sync_neynar_webhook()
-    # except Exception as e:
-    #     logger.error(f"Erreur lors de la synchronisation initiale du webhook: {e}")
-    logger.info("Synchronisation automatique du webhook désactivée - utilisez !test-neynar pour tester")
+    # Synchroniser le webhook au démarrage
+    try:
+        sync_neynar_webhook()
+        logger.info("Webhook Neynar synchronisé au démarrage")
+    except Exception as e:
+        logger.error(f"Erreur lors de la synchronisation initiale du webhook: {e}")
+        logger.info("Synchronisation automatique du webhook échouée - utilisez !test-neynar pour tester")
 
 @bot.event
 async def on_guild_join(guild):
@@ -122,11 +123,12 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
             db.add(tracked_account)
             db.commit()
             
-            # Synchroniser le webhook Neynar (désactivé temporairement)
-            # try:
-            #     sync_neynar_webhook()
-            # except Exception as e:
-            #     logger.error(f"Erreur lors de la synchronisation webhook: {e}")
+            # Synchroniser le webhook Neynar
+            try:
+                sync_neynar_webhook()
+                logger.info("Webhook Neynar synchronisé après ajout du compte")
+            except Exception as e:
+                logger.error(f"Erreur lors de la synchronisation webhook: {e}")
             
             await ctx.reply(f"✅ Compte Farcaster `{user['username']}` (FID: {user['fid']}) ajouté au suivi dans {target_channel.mention} !")
             
@@ -173,11 +175,12 @@ async def untrack_command(ctx, fid_or_username: str):
             if deleted_count > 0:
                 db.commit()
                 
-                # Synchroniser le webhook Neynar (désactivé temporairement)
-                # try:
-                #     sync_neynar_webhook()
-                # except Exception as e:
-                #     logger.error(f"Erreur lors de la synchronisation webhook: {e}")
+                # Synchroniser le webhook Neynar
+                try:
+                    sync_neynar_webhook()
+                    logger.info("Webhook Neynar synchronisé après suppression du compte")
+                except Exception as e:
+                    logger.error(f"Erreur lors de la synchronisation webhook: {e}")
                 
                 await ctx.reply(f"✅ Compte Farcaster `{user['username']}` (FID: {user['fid']}) supprimé du suivi !")
                 logger.info(f"Compte Farcaster {user['username']} (FID: {user['fid']}) supprimé du tracking dans {ctx.guild.name}")
@@ -360,10 +363,10 @@ async def test_neynar_command(ctx):
         # Test 4: Test de synchronisation
         try:
             from webhook_sync import sync_neynar_webhook
-            # sync_neynar_webhook()  # Désactivé temporairement
+            sync_neynar_webhook()  # Test de synchronisation
             embed.add_field(
                 name="4️⃣ Synchronisation",
-                value="⚠️ Synchronisation désactivée temporairement",
+                value="✅ Synchronisation testée avec succès",
                 inline=False
             )
         except Exception as e:
