@@ -100,8 +100,40 @@ def sync_neynar_webhook():
                         
                     except Exception as e:
                         logger.error(f"Erreur lors de la mise à jour du webhook: {e}")
-                        # Ne pas lever l'exception, juste logger l'erreur
-                        return
+                        # Si le webhook n'existe plus côté Neynar (404), le recréer proprement
+                        error_message = str(e).lower()
+                        if "404" in error_message or "not found" in error_message:
+                            logger.warning("Webhook introuvable côté Neynar. Suppression de l'état local et recréation...")
+                            try:
+                                # Supprimer l'état local existant
+                                db.delete(webhook_state)
+                                db.commit()
+                                # Créer un nouveau webhook avec les FIDs actuels
+                                new_webhook = get_neynar_client().create_webhook(
+                                    f"{config.PUBLIC_BASE_URL}/webhooks/neynar",
+                                    all_fids
+                                )
+                                if not new_webhook or "webhook" not in new_webhook or "webhook_id" not in new_webhook["webhook"]:
+                                    logger.error(f"❌ Réponse invalide lors de la recréation: {new_webhook}")
+                                    return
+                                new_id = new_webhook["webhook"]["webhook_id"]
+                                logger.info(f"✅ Nouveau webhook recréé avec l'ID: {new_id}")
+                                # Enregistrer le nouvel état
+                                new_state = WebhookState(
+                                    id="singleton",
+                                    webhook_id=new_id,
+                                    active=new_webhook.get("active", True),
+                                    author_fids=json.dumps(all_fids)
+                                )
+                                db.add(new_state)
+                                db.commit()
+                                logger.info("✅ État du webhook recréé et synchronisé")
+                            except Exception as recreate_error:
+                                logger.error(f"❌ Échec de la recréation du webhook après 404: {recreate_error}")
+                                return
+                        else:
+                            # Ne pas lever l'exception, juste logger l'erreur
+                            return
                 else:
                     logger.info("Aucun changement de FIDs détecté, webhook à jour")
             
