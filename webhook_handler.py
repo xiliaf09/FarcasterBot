@@ -209,108 +209,133 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
 def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any], 
                     embeds: List[Dict], reactions: Dict, replies: Dict, views: Dict) -> Dict[str, Any]:
     """Construire l'embed Discord pour un cast selon la structure officielle Neynar"""
-    # Construire l'URL Warpcast
-    username = author.get("username", "")
-    cast_hash = cast_data.get("hash", "")
-    short_hash = cast_hash[:8] if len(cast_hash) > 8 else cast_hash
-    warpcast_url = f"https://warpcast.com/{username}/{short_hash}"
-    
-    # Tronquer le texte si nécessaire
-    text = cast_data.get("text", "")
-    if len(text) > 500:
-        text = text[:497] + "..."
-    
-    # Construire l'embed de base
-    embed = {
-        "title": f"@{username} a posté",
-        "description": text,
-        "url": warpcast_url,
-        "color": 0x8B5CF6,  # Couleur Farcaster
-        "timestamp": cast_data.get("timestamp"),
-        "footer": {
-            "text": f"FID: {author.get('fid')} • {cast_data.get('timestamp', '')}"
+    try:
+        # Construire l'URL Warpcast
+        username = author.get("username", "")
+        cast_hash = cast_data.get("hash", "")
+        short_hash = cast_hash[:8] if len(cast_hash) > 8 else cast_hash
+        warpcast_url = f"https://warpcast.com/{username}/{short_hash}"
+        
+        # Tronquer le texte si nécessaire
+        text = cast_data.get("text", "")
+        if len(text) > 500:
+            text = text[:497] + "..."
+        
+        # Construire l'embed de base
+        embed = {
+            "title": f"@{username} a posté",
+            "description": text,
+            "url": warpcast_url,
+            "color": 0x8B5CF6,  # Couleur Farcaster
+            "footer": {
+                "text": f"FID: {author.get('fid')} • {cast_data.get('timestamp', '')}"
+            }
         }
-    }
-    
-    # Ajouter les champs conditionnels selon la structure officielle
-    fields = []
-    
-    # Gestion des replies
-    if cast_data.get("parent_hash") or cast_data.get("parent_url"):
-        if cast_data.get("parent_url"):
+        
+        # Ajouter le timestamp si disponible
+        if cast_data.get("timestamp"):
+            embed["timestamp"] = cast_data.get("timestamp")
+        
+        # Ajouter les champs conditionnels selon la structure officielle
+        fields = []
+        
+        # Gestion des replies
+        if cast_data.get("parent_hash") or cast_data.get("parent_url"):
+            if cast_data.get("parent_url"):
+                fields.append({
+                    "name": "💬 Réponse à",
+                    "value": str(cast_data["parent_url"]),
+                    "inline": False
+                })
+            else:
+                fields.append({
+                    "name": "💬 Réponse",
+                    "value": "Réponse dans un thread",
+                    "inline": False
+                })
+        
+        # Gestion des threads
+        if cast_data.get("thread_hash"):
+            thread_hash = str(cast_data.get("thread_hash", ""))
             fields.append({
-                "name": "💬 Réponse à",
-                "value": cast_data["parent_url"],
-                "inline": False
-            })
-        else:
-            fields.append({
-                "name": "💬 Réponse",
-                "value": "Réponse dans un thread",
-                "inline": False
-            })
-    
-    # Gestion des threads
-    if cast_data.get("thread_hash"):
-        fields.append({
-            "name": "🧵 Thread",
-            "value": f"Thread: {cast_data['thread_hash'][:8]}...",
-            "inline": True
-        })
-    
-    # Gestion des embeds
-    if embeds:
-        embed_count = len(embeds)
-        fields.append({
-            "name": "🔗 Liens",
-            "value": f"{embed_count} lien(s) attaché(s)",
-            "inline": True
-        })
-    
-    # Gestion des réactions
-    if reactions:
-        total_reactions = sum(reactions.values())
-        fields.append({
-            "name": "❤️ Réactions",
-            "value": f"{total_reactions} réaction(s)",
-            "inline": True
-        })
-    
-    # Gestion des vues
-    if views:
-        view_count = views.get("count", 0)
-        if view_count > 0:
-            fields.append({
-                "name": "👁️ Vues",
-                "value": f"{view_count} vue(s)",
+                "name": "🧵 Thread",
+                "value": f"Thread: {thread_hash[:8]}...",
                 "inline": True
             })
-    
-    # Gestion des replies
-    if replies:
-        reply_count = replies.get("count", 0)
-        if reply_count > 0:
+        
+        # Gestion des embeds
+        if embeds and isinstance(embeds, list):
+            embed_count = len(embeds)
             fields.append({
-                "name": "💬 Réponses",
-                "value": f"{reply_count} réponse(s)",
+                "name": "🔗 Liens",
+                "value": f"{embed_count} lien(s) attaché(s)",
                 "inline": True
             })
-    
-    if fields:
-        embed["fields"] = fields
-    
-    # Ajouter l'avatar si disponible
-    if author.get("pfp_url"):  # Correction selon la doc officielle
-        embed["thumbnail"] = {"url": author["pfp_url"]}
-    
-    # Ajouter des informations sur l'auteur
-    embed["author"] = {
-        "name": author.get("display_name", username),
-        "url": f"https://warpcast.com/{username}",
-        "icon_url": author.get("pfp_url", "")
-    }
-    
-    return embed
+        
+        # Gestion des réactions
+        if reactions and isinstance(reactions, dict):
+            try:
+                total_reactions = sum(int(v) for v in reactions.values() if str(v).isdigit())
+                fields.append({
+                    "name": "❤️ Réactions",
+                    "value": f"{total_reactions} réaction(s)",
+                    "inline": True
+                })
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erreur lors du calcul des réactions: {e}")
+        
+        # Gestion des vues
+        if views and isinstance(views, dict):
+            try:
+                view_count = int(views.get("count", 0))
+                if view_count > 0:
+                    fields.append({
+                        "name": "👁️ Vues",
+                        "value": f"{view_count} vue(s)",
+                        "inline": True
+                    })
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erreur lors du calcul des vues: {e}")
+        
+        # Gestion des replies
+        if replies and isinstance(replies, dict):
+            try:
+                reply_count = int(replies.get("count", 0))
+                if reply_count > 0:
+                    fields.append({
+                        "name": "💬 Réponses",
+                        "value": f"{reply_count} réponse(s)",
+                        "inline": True
+                    })
+            except (ValueError, TypeError) as e:
+                logger.warning(f"Erreur lors du calcul des réponses: {e}")
+        
+        if fields:
+            embed["fields"] = fields
+        
+        # Ajouter l'avatar si disponible
+        if author.get("pfp_url"):
+            embed["thumbnail"] = {"url": str(author["pfp_url"])}
+        
+        # Ajouter des informations sur l'auteur
+        embed["author"] = {
+            "name": str(author.get("display_name", username)),
+            "url": f"https://warpcast.com/{username}",
+            "icon_url": str(author.get("pfp_url", ""))
+        }
+        
+        logger.info(f"✅ Embed construit avec succès pour {username}")
+        return embed
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur lors de la construction de l'embed: {e}")
+        # Retourner un embed minimal en cas d'erreur
+        return {
+            "title": f"@{username} a posté",
+            "description": text[:100] + "..." if len(text) > 100 else text,
+            "color": 0xFF0000,  # Rouge pour indiquer une erreur
+            "footer": {"text": "Erreur lors de la construction de l'embed"}
+        }
 
 @app.get("/admin/resync")
 async def admin_resync():
