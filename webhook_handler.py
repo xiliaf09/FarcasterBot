@@ -1,40 +1,141 @@
-from fastapi import FastAPI, Request, Depends, HTTPException
-from fastapi.responses import JSONResponse
+import asyncio
 import hmac
 import hashlib
 import json
 import logging
 import uuid
-from typing import Dict, Any, List, Optional
-from database import get_session_local
+from typing import Dict, Any, List
+from fastapi import FastAPI, Request, HTTPException, Depends
 from sqlalchemy.orm import Session
-from discord_bot import bot
-from config import config
-from database import TrackedAccount, Delivery
 import discord
 import discord.utils
-import asyncio
+from database import get_session_local, Delivery
+from config import config
 
 # Configuration du logging
-logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Créer l'application FastAPI
-app = FastAPI(title="Farcaster Tracker Webhook API")
+app = FastAPI(title="Farcaster Tracker Webhook Handler")
+
+# Queue pour les messages Discord
+import queue
+import threading
+import time
+
+discord_queue = queue.Queue()
+worker_thread = None
+worker_running = False
+
+def discord_worker():
+    """Worker thread pour envoyer les messages Discord de manière synchrone"""
+    global worker_running
+    worker_running = True
+    
+    while worker_running:
+        try:
+            # Récupérer un message de la queue
+            message_data = discord_queue.get(timeout=1)
+            if message_data is None:  # Signal d'arrêt
+                break
+                
+            channel_id, embed_dict, author_username = message_data
+            
+            try:
+                # Récupérer le bot depuis le module principal
+                from main import bot
+                
+                if bot and bot.is_ready():
+                    channel = bot.get_channel(channel_id)
+                    if channel:
+                        # Créer l'embed Discord
+                        embed = discord.Embed(
+                            title=embed_dict.get("title", "Nouveau Cast"),
+                            description=embed_dict.get("description", ""),
+                            color=embed_dict.get("color", 0x8B5CF6),
+                            url=embed_dict.get("url", "")
+                        )
+                        
+                        if embed_dict.get("timestamp"):
+                            embed.timestamp = discord.utils.utcnow()
+                        if embed_dict.get("footer"):
+                            embed.set_footer(text=embed_dict.get("footer", {}).get("text", ""))
+                        if embed_dict.get("fields"):
+                            for field in embed_dict["fields"]:
+                                embed.add_field(
+                                    name=field.get("name", ""), 
+                                    value=field.get("value", ""), 
+                                    inline=field.get("inline", True)
+                                )
+                        if embed_dict.get("thumbnail"):
+                            embed.set_thumbnail(url=embed_dict["thumbnail"]["url"])
+                        if embed_dict.get("author"):
+                            author_info = embed_dict["author"]
+                            embed.set_author(
+                                name=author_info.get("name", ""), 
+                                url=author_info.get("url", ""), 
+                                icon_url=author_info.get("icon_url", "")
+                            )
+                        
+                        # Envoyer le message de manière synchrone
+                        channel.send(embed=embed)
+                        logger.info(f"✅ Message Discord envoyé dans {channel.name} pour {author_username}")
+                        
+                    else:
+                        logger.error(f"❌ Canal {channel_id} non trouvé")
+                else:
+                    logger.warning("⚠️ Bot Discord pas encore prêt")
+                    
+            except Exception as e:
+                logger.error(f"❌ Erreur lors de l'envoi Discord pour {author_username}: {e}")
+                
+            finally:
+                discord_queue.task_done()
+                
+        except queue.Empty:
+            continue
+        except Exception as e:
+            logger.error(f"❌ Erreur dans le worker Discord: {e}")
+            time.sleep(1)
+
+def start_discord_worker():
+    """Démarrer le worker thread Discord"""
+    global worker_thread
+    if worker_thread is None or not worker_thread.is_alive():
+        worker_thread = threading.Thread(target=discord_worker, daemon=True)
+        worker_thread.start()
+        logger.info("🚀 Worker Discord démarré")
+
+def stop_discord_worker():
+    """Arrêter le worker thread Discord"""
+    global worker_running, worker_thread
+    worker_running = False
+    if worker_thread:
+        discord_queue.put(None)  # Signal d'arrêt
+        worker_thread.join(timeout=5)
+        logger.info("🛑 Worker Discord arrêté")
+
+# Démarrer le worker au démarrage
+@app.on_event("startup")
+async def startup_event():
+    start_discord_worker()
+
+# Arrêter le worker à l'arrêt
+@app.on_event("shutdown")
+async def shutdown_event():
+    stop_discord_worker()
 
 def verify_signature(request: Request, body: bytes) -> bool:
-    """Vérifier la signature du webhook Neynar"""
+    """Vérifier la signature HMAC-SHA512 du webhook Neynar"""
     signature = request.headers.get("X-Neynar-Signature")
     if not signature:
         logger.warning("❌ Signature manquante dans les headers")
         return False
     
-    # Log pour debug
     logger.info(f"🔐 Signature reçue: {signature}")
     logger.info(f"🔐 Secret utilisé: {config.NEYNAR_WEBHOOK_SECRET[:10]}...")
     logger.info(f"🔐 Body length: {len(body)} bytes")
     
-    # Calculer le HMAC-SHA512
     expected_signature = hmac.new(
         config.NEYNAR_WEBHOOK_SECRET.encode('utf-8'),
         body,
@@ -42,448 +143,187 @@ def verify_signature(request: Request, body: bytes) -> bool:
     ).hexdigest()
     
     logger.info(f"🔐 Signature calculée: {expected_signature}")
-    
-    # Comparaison sécurisée
     is_valid = hmac.compare_digest(signature, expected_signature)
     logger.info(f"🔐 Signature valide: {is_valid}")
     
     return is_valid
 
-def get_db():
-    """Dependency pour obtenir une session de base de données"""
-    db = get_session_local()()
+def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any],
+                    embeds: List[Dict], reactions: Dict, replies: Dict, views: Dict) -> Dict[str, Any]:
+    """Construire l'embed Discord pour le cast"""
     try:
-        yield db
-    finally:
-        db.close()
-
-@app.get("/")
-async def root():
-    """Route racine"""
-    return {"message": "Farcaster Tracker Webhook Server", "status": "running"}
+        username = author.get('username', 'Unknown')
+        text = cast_data.get('text', '')
+        
+        # Construire l'URL du cast
+        cast_hash = cast_data.get('hash', '')
+        cast_url = f"https://warpcast.com/{username}/{cast_hash}" if cast_hash else ""
+        
+        # Gérer les réactions
+        reaction_counts = []
+        if reactions:
+            for reaction_type, users in reactions.items():
+                if isinstance(users, list):
+                    count = len(users)
+                    if count > 0:
+                        emoji_map = {
+                            'like': '❤️',
+                            'recast': '🔄',
+                            'reply': '💬'
+                        }
+                        emoji = emoji_map.get(reaction_type, '👍')
+                        reaction_counts.append(f"{emoji} {count}")
+        
+        # Construire l'embed
+        embed = {
+            "title": f"@{username} a posté",
+            "description": text[:2000] if len(text) <= 2000 else text[:1997] + "...",
+            "color": 0x8B5CF6,
+            "url": cast_url,
+            "timestamp": discord.utils.utcnow().isoformat(),
+            "footer": {"text": "Farcaster Tracker"},
+            "author": {
+                "name": f"@{username}",
+                "url": f"https://warpcast.com/{username}",
+                "icon_url": author.get('pfp_url', '')
+            }
+        }
+        
+        # Ajouter les réactions si disponibles
+        if reaction_counts:
+            embed["fields"] = [{
+                "name": "Réactions",
+                "value": " ".join(reaction_counts),
+                "inline": True
+            }]
+        
+        # Ajouter l'image si disponible
+        if embeds and len(embeds) > 0:
+            first_embed = embeds[0]
+            if isinstance(first_embed, dict) and 'url' in first_embed:
+                embed["thumbnail"] = {"url": str(first_embed['url'])}
+        
+        return embed
+        
+    except Exception as e:
+        logger.error(f"❌ Erreur lors de la construction de l'embed: {e}")
+        return {
+            "title": f"@{username} a posté",
+            "description": text[:100] + "..." if len(text) > 100 else text,
+            "color": 0xFF0000,
+            "footer": {"text": "Erreur lors de la construction de l'embed"}
+        }
 
 @app.get("/healthz")
 async def health_check():
-    """Route de santé"""
-    return {"status": "healthy", "service": "farcaster-tracker"}
+    """Endpoint de santé pour Railway"""
+    return {"status": "healthy", "timestamp": discord.utils.utcnow().isoformat()}
 
 @app.get("/webhooks/neynar")
-async def webhook_health_check():
-    """Endpoint de validation pour Neynar - évite le 405 Method Not Allowed"""
-    return {"status": "ok", "message": "Webhook endpoint is active"}
+async def webhook_health():
+    """Endpoint de santé pour Neynar"""
+    return {"status": "webhook endpoint ready"}
 
 @app.post("/webhooks/neynar")
-async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
-    """Endpoint pour recevoir les webhooks Neynar selon la structure officielle"""
+async def neynar_webhook(request: Request, db: Session = Depends(get_session_local)):
+    """Traiter les webhooks Neynar pour les nouveaux casts"""
     try:
-        # Lire le corps brut de la requête
+        # Lire le body de la requête
         body = await request.body()
         
         # Vérifier la signature
         if not verify_signature(request, body):
-            logger.warning("Signature de webhook invalide reçue")
             raise HTTPException(status_code=401, detail="Signature invalide")
         
         # Parser le JSON
         try:
             data = json.loads(body)
         except json.JSONDecodeError as e:
-            logger.error(f"Erreur de parsing JSON: {e}")
+            logger.error(f"❌ Erreur de parsing JSON: {e}")
             raise HTTPException(status_code=400, detail="JSON invalide")
         
-        # Vérifier que c'est un event cast.created selon la structure officielle
-        if data.get("type") != "cast.created":
-            logger.info(f"Event ignoré (type: {data.get('type')})")
-            return {"status": "ignored", "reason": "not cast.created"}
+        # Extraire les informations du cast
+        cast_data = data.get('cast', {})
+        author = data.get('author', {})
+        embeds = data.get('embeds', [])
+        reactions = data.get('reactions', {})
+        replies = data.get('replies', {})
+        views = data.get('views', {})
         
-        # Extraire les données du cast selon la structure officielle
-        cast_data = data.get("data", {})
-        author = cast_data.get("author", {})
-        cast_hash = cast_data.get("hash")
-        text = cast_data.get("text", "")
-        timestamp = cast_data.get("timestamp")
-        parent_hash = cast_data.get("parent_hash")
-        parent_url = cast_data.get("parent_url")
-        thread_hash = cast_data.get("thread_hash")
-        embeds = cast_data.get("embeds", [])
-        reactions = cast_data.get("reactions", {})
-        replies = cast_data.get("replies", {})
-        views = cast_data.get("views", {})
+        if not cast_data or not author:
+            logger.warning("⚠️ Données de cast ou d'auteur manquantes")
+            return {"status": "ok", "message": "Données insuffisantes"}
         
-        if not all([cast_hash, author.get("fid"), author.get("username")]):
-            logger.warning("Données de cast incomplètes reçues")
-            return {"status": "error", "reason": "incomplete_cast_data"}
+        # Log du cast reçu
+        cast_text = cast_data.get('text', '')[:50]
+        logger.info(f"Cast reçu de {author.get('username', 'Unknown')} (FID: {author.get('fid', 'Unknown')}): {cast_text}...")
         
-        logger.info(f"Cast reçu de {author['username']} (FID: {author['fid']}): {text[:50]}...")
+        # Construire l'embed
+        embed_dict = build_cast_embed(cast_data, author, embeds, reactions, replies, views)
+        logger.info(f"✅ Embed construit avec succès pour {author.get('username', 'Unknown')}")
         
-        # Vérifier si la base de données est disponible
-        if db is None:
-            logger.warning("Base de données non disponible, webhook ignoré")
-            return {"status": "error", "reason": "database_unavailable"}
-        
-        # Trouver tous les serveurs qui suivent cet auteur
-        try:
-            tracked_accounts = db.query(TrackedAccount).filter_by(fid=author["fid"]).all()
-        except Exception as e:
-            logger.error(f"Erreur lors de la requête base de données: {e}")
-            return {"status": "error", "reason": "database_error"}
+        # Récupérer les comptes trackés pour cet auteur
+        from database import TrackedAccount
+        tracked_accounts = db.query(TrackedAccount).filter(
+            TrackedAccount.fid == str(author.get('fid'))
+        ).all()
         
         if not tracked_accounts:
-            logger.info(f"Aucun serveur ne suit l'auteur {author['username']} (FID: {author['fid']})")
-            return {"status": "ignored", "reason": "author_not_tracked"}
+            logger.info(f"ℹ️ Aucun compte tracké pour {author.get('username', 'Unknown')}")
+            return {"status": "ok", "message": "Aucun compte tracké"}
         
-        # Envoyer les notifications Discord
+        # Vérifier si ce cast a déjà été livré
+        cast_hash = cast_data.get('hash', '')
+        if cast_hash:
+            existing_delivery = db.query(Delivery).filter(
+                Delivery.cast_hash == cast_hash
+            ).first()
+            
+            if existing_delivery:
+                logger.info(f"ℹ️ Cast {cast_hash} déjà livré")
+                return {"status": "ok", "message": "Cast déjà livré"}
+        
+        # Envoyer les notifications
         sent_count = 0
         for tracked_account in tracked_accounts:
             try:
-                # Vérifier si ce cast a déjà été livré dans ce salon
-                try:
-                    existing_delivery = db.query(Delivery).filter_by(
-                        cast_hash=cast_hash,
-                        channel_id=tracked_account.channel_id
-                    ).first()
-                except Exception as e:
-                    logger.error(f"Erreur lors de la vérification de livraison: {e}")
-                    continue
+                # Convertir le channel_id en int de manière sécurisée
+                channel_id = int(tracked_account.channel_id)
                 
-                if existing_delivery:
-                    logger.info(f"Cast {cast_hash} déjà livré dans le salon {tracked_account.channel_id}")
-                    continue
+                # Ajouter le message à la queue Discord
+                discord_queue.put((channel_id, embed_dict, author.get('username', 'Unknown')))
+                sent_count += 1
+                logger.info(f"📤 Message ajouté à la queue pour {author.get('username', 'Unknown')}")
                 
-                # Construire l'embed Discord avec tous les champs disponibles
-                embed_dict = build_cast_embed(cast_data, author, embeds, reactions, replies, views)
-                
-                # Convertir le dict en discord.Embed
-                embed = discord.Embed(
-                    title=embed_dict.get("title", "Nouveau Cast"),
-                    description=embed_dict.get("description", ""),
-                    color=embed_dict.get("color", 0x8B5CF6),
-                    url=embed_dict.get("url", "")
-                )
-                
-                # Ajouter le timestamp si disponible
-                if embed_dict.get("timestamp"):
-                    embed.timestamp = discord.utils.utcnow()
-                
-                # Ajouter le footer si disponible
-                if embed_dict.get("footer"):
-                    embed.set_footer(text=embed_dict.get("footer", {}).get("text", ""))
-                
-                # Ajouter les champs si disponibles
-                if embed_dict.get("fields"):
-                    for field in embed_dict["fields"]:
-                        embed.add_field(
-                            name=field.get("name", ""),
-                            value=field.get("value", ""),
-                            inline=field.get("inline", True)
-                        )
-                
-                # Ajouter l'thumbnail si disponible
-                if embed_dict.get("thumbnail"):
-                    embed.set_thumbnail(url=embed_dict["thumbnail"]["url"])
-                
-                # Ajouter l'auteur si disponible
-                if embed_dict.get("author"):
-                    author_info = embed_dict["author"]
-                    embed.set_author(
-                        name=author_info.get("name", ""),
-                        url=author_info.get("url", ""),
-                        icon_url=author_info.get("icon_url", "")
-                    )
-                
-                # Envoyer le message
-                try:
-                    # Convertir le channel_id en int de manière sécurisée
-                    channel_id = int(tracked_account.channel_id)
-                    channel = bot.get_channel(channel_id)
-                    
-                    if channel and bot.is_ready():
-                        try:
-                            # Créer une fonction asynchrone pour l'envoi Discord
-                            async def send_discord_message():
-                                try:
-                                    await channel.send(embed=embed)
-                                    logger.info(f"✅ Message Discord envoyé dans {channel.name}")
-                                    return True
-                                except Exception as e:
-                                    logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
-                                    return False
-                            
-                            # Utiliser run_coroutine_threadsafe pour éviter les conflits d'event loop
-                            try:
-                                import concurrent.futures
-                                loop = asyncio.get_event_loop()
-                                future = asyncio.run_coroutine_threadsafe(send_discord_message(), loop)
-                                success = future.result(timeout=10)  # Timeout de 10 secondes
-                            except concurrent.futures.TimeoutError:
-                                logger.error("❌ Timeout lors de l'envoi Discord")
-                                success = False
-                            except Exception as e:
-                                logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
-                                success = False
-                            
-                            if success:
-                                # Marquer comme livré
-                                try:
-                                    delivery = Delivery(
-                                        id=str(uuid.uuid4()),
-                                        guild_id=tracked_account.guild_id,
-                                        channel_id=tracked_account.channel_id,
-                                        cast_hash=cast_hash
-                                    )
-                                    db.add(delivery)
-                                    
-                                    sent_count += 1
-                                    logger.info(f"✅ Notification envoyée dans {channel.name} pour {author['username']}")
-                                except Exception as e:
-                                    logger.error(f"❌ Erreur lors de l'ajout de la livraison: {e}")
-                                    # Continuer même si la livraison échoue
-                        except discord.errors.Forbidden:
-                            logger.error(f"❌ Permission refusée pour envoyer dans {channel.name}")
-                        except discord.errors.HTTPException as e:
-                            logger.error(f"❌ Erreur HTTP Discord: {e}")
-                        except Exception as e:
-                            logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
-                    else:
-                        if not bot.is_ready():
-                            logger.warning(f"⚠️ Bot Discord pas encore prêt")
-                        else:
-                            logger.warning(f"⚠️ Canal {channel_id} non trouvé")
-                        
-                except ValueError as e:
-                    logger.error(f"❌ Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
-                except Exception as e:
-                    logger.error(f"❌ Erreur lors de l'envoi de la notification pour {author['username']}: {e}")
-                    
+            except ValueError as e:
+                logger.error(f"❌ Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
             except Exception as e:
-                logger.error(f"Erreur générale lors du traitement pour {author['username']}: {e}")
+                logger.error(f"❌ Erreur lors de l'ajout à la queue pour {author.get('username', 'Unknown')}: {e}")
         
-        # Commit des livraisons
-        if sent_count > 0:
+        # Marquer comme livré dans la base
+        if sent_count > 0 and cast_hash:
             try:
+                delivery = Delivery(
+                    id=str(uuid.uuid4()),
+                    guild_id=tracked_accounts[0].guild_id,
+                    channel_id=tracked_accounts[0].channel_id,
+                    cast_hash=cast_hash
+                )
+                db.add(delivery)
                 db.commit()
-                logger.info(f"{sent_count} notification(s) envoyée(s) pour le cast de {author['username']}")
+                logger.info(f"✅ Livraison enregistrée pour {author.get('username', 'Unknown')}")
             except Exception as e:
-                logger.error(f"Erreur lors du commit des livraisons: {e}")
+                logger.error(f"❌ Erreur lors de l'enregistrement de la livraison: {e}")
+                db.rollback()
         
-        return {
-            "status": "success",
-            "notifications_sent": sent_count,
-            "author": author["username"],
-            "cast_hash": cast_hash
-        }
+        logger.info(f"✅ {sent_count} notification(s) ajoutée(s) à la queue pour {author.get('username', 'Unknown')}")
+        return {"status": "ok", "sent_count": sent_count}
         
     except HTTPException:
         raise
     except Exception as e:
-        logger.error(f"Erreur lors du traitement du webhook: {e}")
-        raise HTTPException(status_code=500, detail="Erreur interne du serveur")
-
-def build_cast_embed(cast_data: Dict[str, Any], author: Dict[str, Any], 
-                    embeds: List[Dict], reactions: Dict, replies: Dict, views: Dict) -> Dict[str, Any]:
-    """Construire l'embed Discord pour un cast selon la structure officielle Neynar"""
-    try:
-        # Construire l'URL Warpcast
-        username = author.get("username", "")
-        cast_hash = cast_data.get("hash", "")
-        short_hash = cast_hash[:8] if len(cast_hash) > 8 else cast_hash
-        warpcast_url = f"https://warpcast.com/{username}/{short_hash}"
-        
-        # Tronquer le texte si nécessaire
-        text = cast_data.get("text", "")
-        if len(text) > 500:
-            text = text[:497] + "..."
-        
-        # Construire l'embed de base
-        embed = {
-            "title": f"@{username} a posté",
-            "description": text,
-            "url": warpcast_url,
-            "color": 0x8B5CF6,  # Couleur Farcaster
-            "footer": {
-                "text": f"FID: {author.get('fid')} • {cast_data.get('timestamp', '')}"
-            }
-        }
-        
-        # Ajouter le timestamp si disponible
-        if cast_data.get("timestamp"):
-            embed["timestamp"] = cast_data.get("timestamp")
-        
-        # Ajouter les champs conditionnels selon la structure officielle
-        fields = []
-        
-        # Gestion des replies
-        if cast_data.get("parent_hash") or cast_data.get("parent_url"):
-            if cast_data.get("parent_url"):
-                fields.append({
-                    "name": "💬 Réponse à",
-                    "value": str(cast_data["parent_url"]),
-                    "inline": False
-                })
-            else:
-                fields.append({
-                    "name": "💬 Réponse",
-                    "value": "Réponse dans un thread",
-                    "inline": False
-                })
-        
-        # Gestion des threads
-        if cast_data.get("thread_hash"):
-            thread_hash = str(cast_data.get("thread_hash", ""))
-            fields.append({
-                "name": "🧵 Thread",
-                "value": f"Thread: {thread_hash[:8]}...",
-                "inline": True
-            })
-        
-        # Gestion des embeds
-        if embeds and isinstance(embeds, list):
-            embed_count = len(embeds)
-            fields.append({
-                "name": "🔗 Liens",
-                "value": f"{embed_count} lien(s) attaché(s)",
-                "inline": True
-            })
-        
-        # Gestion des réactions
-        if reactions and isinstance(reactions, dict):
-            try:
-                total_reactions = sum(int(v) for v in reactions.values() if str(v).isdigit())
-                fields.append({
-                    "name": "❤️ Réactions",
-                    "value": f"{total_reactions} réaction(s)",
-                    "inline": True
-                })
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Erreur lors du calcul des réactions: {e}")
-        
-        # Gestion des vues
-        if views and isinstance(views, dict):
-            try:
-                view_count = int(views.get("count", 0))
-                if view_count > 0:
-                    fields.append({
-                        "name": "👁️ Vues",
-                        "value": f"{view_count} vue(s)",
-                        "inline": True
-                    })
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Erreur lors du calcul des vues: {e}")
-        
-        # Gestion des replies
-        if replies and isinstance(replies, dict):
-            try:
-                reply_count = int(replies.get("count", 0))
-                if reply_count > 0:
-                    fields.append({
-                        "name": "💬 Réponses",
-                        "value": f"{reply_count} réponse(s)",
-                        "inline": True
-                    })
-            except (ValueError, TypeError) as e:
-                logger.warning(f"Erreur lors du calcul des réponses: {e}")
-        
-        if fields:
-            embed["fields"] = fields
-        
-        # Ajouter l'avatar si disponible
-        if author.get("pfp_url"):
-            embed["thumbnail"] = {"url": str(author["pfp_url"])}
-        
-        # Ajouter des informations sur l'auteur
-        embed["author"] = {
-            "name": str(author.get("display_name", username)),
-            "url": f"https://warpcast.com/{username}",
-            "icon_url": str(author.get("pfp_url", ""))
-        }
-        
-        logger.info(f"✅ Embed construit avec succès pour {username}")
-        return embed
-        
-    except Exception as e:
-        logger.error(f"❌ Erreur lors de la construction de l'embed: {e}")
-        # Retourner un embed minimal en cas d'erreur
-        return {
-            "title": f"@{username} a posté",
-            "description": text[:100] + "..." if len(text) > 100 else text,
-            "color": 0xFF0000,  # Rouge pour indiquer une erreur
-            "footer": {"text": "Erreur lors de la construction de l'embed"}
-        }
-
-@app.get("/admin/resync")
-async def admin_resync():
-    """Route admin pour forcer la resynchronisation du webhook (dev only)"""
-    try:
-        from webhook_sync import sync_neynar_webhook
-        # sync_neynar_webhook()  # Désactivé temporairement
-        return {"status": "success", "message": "Webhook resynchronisation désactivée temporairement"}
-    except Exception as e:
-        logger.error(f"Erreur lors de la resynchronisation: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/admin/webhook/status")
-async def admin_webhook_status():
-    """Route admin pour vérifier le statut du webhook Neynar"""
-    try:
-        from webhook_sync import get_webhook_stats
-        stats = get_webhook_stats()
-        return stats
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération du statut: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/admin/webhook/test")
-async def admin_webhook_test():
-    """Route admin pour tester la connexion au webhook Neynar"""
-    try:
-        from webhook_sync import test_webhook_connection
-        success = test_webhook_connection()
-        return {
-            "status": "success" if success else "error",
-            "webhook_connection": "active" if success else "failed"
-        }
-    except Exception as e:
-        logger.error(f"Erreur lors du test de connexion: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.get("/admin/neynar/rate-limits")
-async def admin_neynar_rate_limits():
-    """Route admin pour vérifier les rate limits Neynar"""
-    try:
-        from neynar_client import get_neynar_client
-        client = get_neynar_client()
-        if client is None:
-            raise HTTPException(status_code=500, detail="Client Neynar non initialisé")
-        
-        return {
-            "status": "success",
-            "current_plan": client.current_plan,
-            "rate_limits": client.rate_limits[client.current_plan],
-            "requests_this_minute": client.requests_this_minute,
-            "last_request_time": client.last_request_time
-        }
-    except Exception as e:
-        logger.error(f"Erreur lors de la récupération des rate limits: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
-
-@app.post("/admin/neynar/set-plan")
-async def admin_set_plan(plan: str):
-    """Route admin pour changer le plan de rate limits"""
-    try:
-        from neynar_client import get_neynar_client
-        client = get_neynar_client()
-        if client is None:
-            raise HTTPException(status_code=500, detail="Client Neynar non initialisé")
-        
-        client.set_plan(plan)
-        return {
-            "status": "success",
-            "message": f"Plan défini sur: {plan}",
-            "new_plan": client.current_plan
-        }
-    except Exception as e:
-        logger.error(f"Erreur lors du changement de plan: {e}")
-        raise HTTPException(status_code=500, detail=str(e))
+        logger.error(f"❌ Erreur lors du traitement du webhook: {e}")
+        raise HTTPException(status_code=500, detail="Erreur interne")
 
 if __name__ == "__main__":
     import uvicorn
