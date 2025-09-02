@@ -11,6 +11,8 @@ from sqlalchemy.orm import Session
 from discord_bot import bot
 from config import config
 from database import TrackedAccount, Delivery
+import discord
+import discord.utils
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -148,7 +150,45 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                     continue
                 
                 # Construire l'embed Discord avec tous les champs disponibles
-                embed = build_cast_embed(cast_data, author, embeds, reactions, replies, views)
+                embed_dict = build_cast_embed(cast_data, author, embeds, reactions, replies, views)
+                
+                # Convertir le dict en discord.Embed
+                embed = discord.Embed(
+                    title=embed_dict.get("title", "Nouveau Cast"),
+                    description=embed_dict.get("description", ""),
+                    color=embed_dict.get("color", 0x8B5CF6),
+                    url=embed_dict.get("url", "")
+                )
+                
+                # Ajouter le timestamp si disponible
+                if embed_dict.get("timestamp"):
+                    embed.timestamp = discord.utils.utcnow()
+                
+                # Ajouter le footer si disponible
+                if embed_dict.get("footer"):
+                    embed.set_footer(text=embed_dict.get("footer", {}).get("text", ""))
+                
+                # Ajouter les champs si disponibles
+                if embed_dict.get("fields"):
+                    for field in embed_dict["fields"]:
+                        embed.add_field(
+                            name=field.get("name", ""),
+                            value=field.get("value", ""),
+                            inline=field.get("inline", True)
+                        )
+                
+                # Ajouter l'thumbnail si disponible
+                if embed_dict.get("thumbnail"):
+                    embed.set_thumbnail(url=embed_dict["thumbnail"]["url"])
+                
+                # Ajouter l'auteur si disponible
+                if embed_dict.get("author"):
+                    author_info = embed_dict["author"]
+                    embed.set_author(
+                        name=author_info.get("name", ""),
+                        url=author_info.get("url", ""),
+                        icon_url=author_info.get("icon_url", "")
+                    )
                 
                 # Envoyer le message
                 try:
@@ -170,17 +210,17 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                             db.add(delivery)
                             
                             sent_count += 1
-                            logger.info(f"Notification envoyée dans {channel.name} pour {author['username']}")
+                            logger.info(f"✅ Notification envoyée dans {channel.name} pour {author['username']}")
                         except Exception as e:
-                            logger.error(f"Erreur lors de l'ajout de la livraison: {e}")
+                            logger.error(f"❌ Erreur lors de l'ajout de la livraison: {e}")
                             # Continuer même si la livraison échoue
                     else:
-                        logger.warning(f"Canal {channel_id} non trouvé")
+                        logger.warning(f"⚠️ Canal {channel_id} non trouvé")
                         
                 except ValueError as e:
-                    logger.error(f"Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
+                    logger.error(f"❌ Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
                 except Exception as e:
-                    logger.error(f"Erreur lors de l'envoi de la notification pour {author['username']}: {e}")
+                    logger.error(f"❌ Erreur lors de l'envoi de la notification pour {author['username']}: {e}")
                     
             except Exception as e:
                 logger.error(f"Erreur générale lors du traitement pour {author['username']}: {e}")
