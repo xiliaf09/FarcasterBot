@@ -75,6 +75,10 @@ class NeynarClient:
         
         url = f"{self.base_url}{endpoint}"
         
+        logger.info(f"🔧 Requête {method} vers: {url}")
+        if data:
+            logger.info(f"🔧 Payload: {data}")
+        
         for attempt in range(retries):
             try:
                 if method == "GET":
@@ -102,6 +106,10 @@ class NeynarClient:
                 elif response.status_code == 403:  # Forbidden
                     logger.error("Erreur 403: Accès refusé - vérifiez votre clé API et permissions")
                     raise ValueError("Accès refusé à l'API Neynar")
+                
+                elif response.status_code == 400:  # Bad Request
+                    logger.error(f"Erreur 400: Requête invalide - Response: {response.text}")
+                    raise ValueError(f"Requête invalide: {response.text}")
                 
                 response.raise_for_status()
                 return response.json()
@@ -159,7 +167,7 @@ class NeynarClient:
     def create_webhook(self, url: str, author_fids: List[int] = None) -> Dict:
         """Créer un webhook Neynar selon la structure officielle"""
         payload = {
-            "webhook_url": url,  # Correction selon la doc
+            "webhook_url": url,
             "subscription": {
                 "cast.created": {
                     "author_fids": author_fids if author_fids else []
@@ -167,6 +175,7 @@ class NeynarClient:
             }
         }
         
+        logger.info(f"🔧 Création webhook avec payload: {payload}")
         return self._make_request("/v2/farcaster/webhook", method="POST", data=payload)
     
     def update_webhook(self, webhook_id: str, author_fids: List[int]) -> Dict:
