@@ -42,13 +42,19 @@ def sync_neynar_webhook():
                     
                     logger.info(f"🔧 Réponse de création webhook: {webhook}")
                     
-                    # Vérifier que la réponse contient un ID
-                    if not webhook or "id" not in webhook:
+                    # Vérifier que la réponse contient un webhook_id
+                    if not webhook or "webhook" not in webhook:
                         logger.error(f"❌ Réponse invalide de l'API Neynar: {webhook}")
-                        logger.error("❌ La réponse ne contient pas de champ 'id'")
+                        logger.error("❌ La réponse ne contient pas de champ 'webhook'")
                         return
                     
-                    webhook_id = webhook["id"]
+                    webhook_data = webhook["webhook"]
+                    if "webhook_id" not in webhook_data:
+                        logger.error(f"❌ Réponse webhook invalide: {webhook_data}")
+                        logger.error("❌ La réponse webhook ne contient pas de champ 'webhook_id'")
+                        return
+                    
+                    webhook_id = webhook_data["webhook_id"]
                     logger.info(f"✅ Webhook ID extrait: {webhook_id}")
                     
                     webhook_state = WebhookState(
