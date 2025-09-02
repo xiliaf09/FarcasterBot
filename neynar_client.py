@@ -220,9 +220,13 @@ class NeynarClient:
         """Récupérer les détails d'un webhook"""
         return self._make_request(f"/v2/farcaster/webhook/{webhook_id}")
     
-    def get_user_feed(self, fid: int, limit: int = 25) -> Dict:
-        """Récupérer le feed d'un utilisateur selon la doc officielle"""
-        endpoint = f"/v2/farcaster/feed?fid={fid}&limit={limit}"
+    def get_user_feed(self, fid: int, limit: int = 25, include_replies: bool = True, viewer_fid: int = None) -> Dict:
+        """Récupérer les casts d'un utilisateur selon la doc officielle v2"""
+        endpoint = f"/v2/farcaster/feed/user/casts/?fid={fid}&limit={limit}&include_replies={str(include_replies).lower()}"
+        
+        if viewer_fid:
+            endpoint += f"&viewer_fid={viewer_fid}"
+        
         return self._make_request(endpoint)
     
     def search_casts(self, query: str, limit: int = 25) -> Dict:

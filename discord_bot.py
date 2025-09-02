@@ -411,18 +411,17 @@ async def lastcast_command(ctx, fid_or_username: str):
         
         # Récupérer le dernier cast
         try:
-            # Utiliser search_casts avec le username pour récupérer le dernier cast
-            search_query = f"from:{user['username']}"
-            search_result = client.search_casts(search_query, limit=10)
+            # Utiliser la nouvelle méthode officielle v2 pour récupérer les casts
+            logger.info(f"🔧 Récupération des casts avec get_user_feed pour FID {user['fid']}")
+            feed_result = client.get_user_feed(user['fid'], limit=10, include_replies=True)
             
-            if not search_result.get("casts") or len(search_result["casts"]) == 0:
+            if not feed_result.get("casts") or len(feed_result["casts"]) == 0:
                 await ctx.reply(f"📝 Aucun cast trouvé pour `{user['username']}` (FID: {user['fid']})")
                 return
             
-            # Trier par timestamp pour avoir le plus récent
-            casts = search_result["casts"]
-            casts.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
-            cast = casts[0]  # Le plus récent
+            # Les casts sont déjà triés chronologiquement par l'API
+            casts = feed_result["casts"]
+            cast = casts[0]  # Le plus récent (premier de la liste)
             
             logger.info(f"🔧 Cast trouvé: {cast.get('text', 'N/A')} - Hash: {cast.get('hash', 'N/A')}")
             logger.info(f"🔧 Timestamp du cast: {cast.get('timestamp', 'N/A')}")
@@ -561,18 +560,26 @@ async def debug_cast_command(ctx, fid_or_username: str):
                 inline=False
             )
         
-        # Test 3: get_user_feed
+        # Test 3: get_user_feed (nouvelle méthode v2)
         try:
-            feed_result = client.get_user_feed(user['fid'], limit=5)
+            feed_result = client.get_user_feed(user['fid'], limit=5, include_replies=True)
             casts_count = len(feed_result.get("casts", []))
             embed.add_field(
-                name="3️⃣ get_user_feed (FID)",
-                value=f"✅ {casts_count} cast(s) trouvé(s)\nFID: {user['fid']}",
+                name="3️⃣ get_user_feed v2 (FID)",
+                value=f"✅ {casts_count} cast(s) trouvé(s)\nFID: {user['fid']}\nMéthode: /v2/farcaster/feed/user/casts/",
                 inline=False
             )
+            
+            if casts_count > 0:
+                for i, cast in enumerate(feed_result["casts"][:3]):
+                    embed.add_field(
+                        name=f"Cast {i+1} (v2)",
+                        value=f"Texte: {cast.get('text', 'N/A')[:50]}...\nHash: {cast.get('hash', 'N/A')}",
+                        inline=True
+                    )
         except Exception as e:
             embed.add_field(
-                name="3️⃣ get_user_feed (FID)",
+                name="3️⃣ get_user_feed v2 (FID)",
                 value=f"❌ Erreur: {str(e)}",
                 inline=False
             )
