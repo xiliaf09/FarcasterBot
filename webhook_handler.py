@@ -13,6 +13,7 @@ from config import config
 from database import TrackedAccount, Delivery
 import discord
 import discord.utils
+import asyncio
 
 # Configuration du logging
 logging.basicConfig(level=logging.INFO)
@@ -198,23 +199,36 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                     
                     if channel and bot.is_ready():
                         try:
-                            await channel.send(embed=embed)
+                            # Créer une tâche asynchrone pour l'envoi Discord
+                            async def send_discord_message():
+                                try:
+                                    await channel.send(embed=embed)
+                                    logger.info(f"✅ Message Discord envoyé dans {channel.name}")
+                                    return True
+                                except Exception as e:
+                                    logger.error(f"❌ Erreur lors de l'envoi Discord: {e}")
+                                    return False
                             
-                            # Marquer comme livré
-                            try:
-                                delivery = Delivery(
-                                    id=str(uuid.uuid4()),
-                                    guild_id=tracked_account.guild_id,
-                                    channel_id=tracked_account.channel_id,
-                                    cast_hash=cast_hash
-                                )
-                                db.add(delivery)
-                                
-                                sent_count += 1
-                                logger.info(f"✅ Notification envoyée dans {channel.name} pour {author['username']}")
-                            except Exception as e:
-                                logger.error(f"❌ Erreur lors de l'ajout de la livraison: {e}")
-                                # Continuer même si la livraison échoue
+                            # Lancer la tâche et attendre le résultat
+                            task = asyncio.create_task(send_discord_message())
+                            success = await task
+                            
+                            if success:
+                                # Marquer comme livré
+                                try:
+                                    delivery = Delivery(
+                                        id=str(uuid.uuid4()),
+                                        guild_id=tracked_account.guild_id,
+                                        channel_id=tracked_account.channel_id,
+                                        cast_hash=cast_hash
+                                    )
+                                    db.add(delivery)
+                                    
+                                    sent_count += 1
+                                    logger.info(f"✅ Notification envoyée dans {channel.name} pour {author['username']}")
+                                except Exception as e:
+                                    logger.error(f"❌ Erreur lors de l'ajout de la livraison: {e}")
+                                    # Continuer même si la livraison échoue
                         except discord.errors.Forbidden:
                             logger.error(f"❌ Permission refusée pour envoyer dans {channel.name}")
                         except discord.errors.HTTPException as e:
