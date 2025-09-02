@@ -1,21 +1,23 @@
-from fastapi import FastAPI, Request, HTTPException, Depends
+from fastapi import FastAPI, Request, Depends, HTTPException
 from fastapi.responses import JSONResponse
 import hmac
 import hashlib
 import json
 import logging
 import uuid
-from typing import Dict, Any, List
-from database import SessionLocal, TrackedAccount, Delivery
+from typing import Dict, Any, List, Optional
+from database import get_session_local
+from sqlalchemy.orm import Session
 from discord_bot import bot
 from config import config
+from database import TrackedAccount, Delivery
 
 # Configuration du logging
-logging.basicConfig(level=getattr(logging, config.LOG_LEVEL))
+logging.basicConfig(level=logging.INFO)
 logger = logging.getLogger(__name__)
 
 # Créer l'application FastAPI
-app = FastAPI(title="Farcaster Tracker Webhook", version="1.0.0")
+app = FastAPI(title="Farcaster Tracker Webhook API")
 
 def verify_signature(request: Request, body: bytes) -> bool:
     """Vérifier la signature du webhook Neynar"""
@@ -34,7 +36,7 @@ def verify_signature(request: Request, body: bytes) -> bool:
 
 def get_db():
     """Dependency pour obtenir une session de base de données"""
-    db = SessionLocal()
+    db = get_session_local()()
     try:
         yield db
     finally:
@@ -56,7 +58,7 @@ async def webhook_health_check():
     return {"status": "ok", "message": "Webhook endpoint is active"}
 
 @app.post("/webhooks/neynar")
-async def neynar_webhook(request: Request, db: SessionLocal = Depends(get_db)):
+async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
     """Endpoint pour recevoir les webhooks Neynar selon la structure officielle"""
     try:
         # Lire le corps brut de la requête
