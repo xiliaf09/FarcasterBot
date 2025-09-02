@@ -23,7 +23,13 @@ def verify_signature(request: Request, body: bytes) -> bool:
     """Vérifier la signature du webhook Neynar"""
     signature = request.headers.get("X-Neynar-Signature")
     if not signature:
+        logger.warning("❌ Signature manquante dans les headers")
         return False
+    
+    # Log pour debug
+    logger.info(f"🔐 Signature reçue: {signature}")
+    logger.info(f"🔐 Secret utilisé: {config.NEYNAR_WEBHOOK_SECRET[:10]}...")
+    logger.info(f"🔐 Body length: {len(body)} bytes")
     
     # Calculer le HMAC-SHA512
     expected_signature = hmac.new(
@@ -32,7 +38,13 @@ def verify_signature(request: Request, body: bytes) -> bool:
         hashlib.sha512
     ).hexdigest()
     
-    return hmac.compare_digest(signature, expected_signature)
+    logger.info(f"🔐 Signature calculée: {expected_signature}")
+    
+    # Comparaison sécurisée
+    is_valid = hmac.compare_digest(signature, expected_signature)
+    logger.info(f"🔐 Signature valide: {is_valid}")
+    
+    return is_valid
 
 def get_db():
     """Dependency pour obtenir une session de base de données"""
