@@ -242,16 +242,75 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_session_loc
             logger.error(f"❌ Erreur de parsing JSON: {e}")
             raise HTTPException(status_code=400, detail="JSON invalide")
         
-        # Extraire les informations du cast
-        cast_data = data.get('cast', {})
-        author = data.get('author', {})
-        embeds = data.get('embeds', [])
-        reactions = data.get('reactions', {})
-        replies = data.get('replies', {})
-        views = data.get('views', {})
+        # Log complet de la structure des données pour debug
+        logger.info(f"🔍 Structure complète du webhook reçue: {json.dumps(data, indent=2)}")
+        
+        # Extraire les informations du cast selon différentes structures possibles
+        cast_data = None
+        author = None
+        embeds = []
+        reactions = {}
+        replies = {}
+        views = {}
+        
+        # Essayer différentes structures de webhook Neynar
+        if 'cast' in data and 'author' in data:
+            # Structure: { "cast": {...}, "author": {...} }
+            cast_data = data.get('cast', {})
+            author = data.get('author', {})
+            embeds = data.get('embeds', [])
+            reactions = data.get('reactions', {})
+            replies = data.get('replies', {})
+            views = data.get('views', {})
+            logger.info("✅ Structure détectée: cast + author séparés")
+            
+        elif 'data' in data and 'type' in data:
+            # Structure: { "type": "cast.created", "data": {...} }
+            if data.get('type') == 'cast.created':
+                cast_data = data.get('data', {})
+                author = cast_data.get('author', {})
+                embeds = cast_data.get('embeds', [])
+                reactions = cast_data.get('reactions', {})
+                replies = cast_data.get('replies', {})
+                views = cast_data.get('views', {})
+                logger.info("✅ Structure détectée: type cast.created")
+            else:
+                logger.info(f"ℹ️ Type d'event ignoré: {data.get('type')}")
+                return {"status": "ok", "message": f"Event type ignoré: {data.get('type')}"}
+                
+        elif 'cast' in data and 'author' not in data:
+            # Structure: { "cast": {...} } avec author dans cast
+            cast_data = data.get('cast', {})
+            author = cast_data.get('author', {})
+            embeds = cast_data.get('embeds', [])
+            reactions = cast_data.get('reactions', {})
+            replies = cast_data.get('replies', {})
+            views = cast_data.get('views', {})
+            logger.info("✅ Structure détectée: cast avec author inclus")
+            
+        else:
+            # Structure inconnue, essayer de trouver des données utiles
+            logger.warning("⚠️ Structure de webhook inconnue, tentative d'extraction...")
+            
+            # Chercher des champs qui pourraient contenir des données de cast
+            for key, value in data.items():
+                if isinstance(value, dict):
+                    if 'text' in value or 'hash' in value:
+                        cast_data = value
+                        logger.info(f"✅ Cast data trouvé dans la clé: {key}")
+                    if 'username' in value or 'fid' in value:
+                        author = value
+                        logger.info(f"✅ Author trouvé dans la clé: {key}")
+                        
+            # Si pas trouvé, essayer de traiter data comme cast_data
+            if not cast_data and 'data' in data:
+                cast_data = data.get('data', {})
+                logger.info("✅ Utilisation de data comme cast_data")
         
         if not cast_data or not author:
-            logger.warning("⚠️ Données de cast ou d'auteur manquantes")
+            logger.warning(f"⚠️ Données de cast ou d'auteur manquantes")
+            logger.warning(f"🔍 Cast data: {cast_data}")
+            logger.warning(f"🔍 Author: {author}")
             return {"status": "ok", "message": "Données insuffisantes"}
         
         # Log du cast reçu
