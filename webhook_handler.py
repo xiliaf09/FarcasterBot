@@ -271,7 +271,7 @@ async def webhook_health():
     return {"status": "webhook endpoint ready"}
 
 @app.post("/webhooks/neynar")
-async def neynar_webhook(request: Request, db: Session = Depends(get_session_local)):
+async def neynar_webhook(request: Request):
     """Traiter les webhooks Neynar pour les nouveaux casts"""
     try:
         # Lire le body de la requête
