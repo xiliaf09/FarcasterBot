@@ -139,31 +139,39 @@ async def neynar_webhook(request: Request, db: Session = Depends(get_db)):
                 embed = build_cast_embed(cast_data, author, embeds, reactions, replies, views)
                 
                 # Envoyer le message
-                channel = bot.get_channel(int(tracked_account.channel_id))
-                if channel:
-                    await channel.send(embed=embed)
+                try:
+                    # Convertir le channel_id en int de manière sécurisée
+                    channel_id = int(tracked_account.channel_id)
+                    channel = bot.get_channel(channel_id)
                     
-                    # Marquer comme livré
-                    try:
-                        delivery = Delivery(
-                            id=str(uuid.uuid4()),
-                            guild_id=tracked_account.guild_id,
-                            channel_id=tracked_account.channel_id,
-                            cast_hash=cast_hash
-                        )
-                        db.add(delivery)
+                    if channel:
+                        await channel.send(embed=embed)
                         
-                        sent_count += 1
-                        logger.info(f"Notification envoyée dans {channel.name} pour {author['username']}")
-                    except Exception as e:
-                        logger.error(f"Erreur lors de l'ajout de la livraison: {e}")
-                        # Continuer même si la livraison échoue
+                        # Marquer comme livré
+                        try:
+                            delivery = Delivery(
+                                id=str(uuid.uuid4()),
+                                guild_id=tracked_account.guild_id,
+                                channel_id=tracked_account.channel_id,
+                                cast_hash=cast_hash
+                            )
+                            db.add(delivery)
+                            
+                            sent_count += 1
+                            logger.info(f"Notification envoyée dans {channel.name} pour {author['username']}")
+                        except Exception as e:
+                            logger.error(f"Erreur lors de l'ajout de la livraison: {e}")
+                            # Continuer même si la livraison échoue
+                    else:
+                        logger.warning(f"Canal {channel_id} non trouvé")
                         
-                else:
-                    logger.warning(f"Canal {tracked_account.channel_id} non trouvé")
+                except ValueError as e:
+                    logger.error(f"Erreur de conversion du channel_id '{tracked_account.channel_id}': {e}")
+                except Exception as e:
+                    logger.error(f"Erreur lors de l'envoi de la notification pour {author['username']}: {e}")
                     
             except Exception as e:
-                logger.error(f"Erreur lors de l'envoi de la notification pour {author['username']}: {e}")
+                logger.error(f"Erreur générale lors du traitement pour {author['username']}: {e}")
         
         # Commit des livraisons
         if sent_count > 0:
