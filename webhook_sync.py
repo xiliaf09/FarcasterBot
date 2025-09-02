@@ -8,6 +8,15 @@ from config import config
 
 logger = logging.getLogger(__name__)
 
+def build_webhook_url(base_url: str, endpoint: str = "webhooks/neynar") -> str:
+    """Construire une URL de webhook sans double slash"""
+    # Supprimer les slashes en fin de base_url
+    base_url = base_url.rstrip('/')
+    # Supprimer les slashes en début d'endpoint
+    endpoint = endpoint.lstrip('/')
+    # Construire l'URL proprement
+    return f"{base_url}/{endpoint}"
+
 def sync_neynar_webhook():
     """Synchroniser le webhook Neynar avec les FIDs suivis selon la documentation officielle"""
     try:
@@ -36,7 +45,7 @@ def sync_neynar_webhook():
                 try:
                     logger.info("🔧 Tentative de création du webhook...")
                     webhook = get_neynar_client().create_webhook(
-                        f"{config.PUBLIC_BASE_URL}/webhooks/neynar",
+                        build_webhook_url(config.PUBLIC_BASE_URL),
                         all_fids
                     )
                     
@@ -110,7 +119,7 @@ def sync_neynar_webhook():
                                 db.commit()
                                 # Créer un nouveau webhook avec les FIDs actuels
                                 new_webhook = get_neynar_client().create_webhook(
-                                    f"{config.PUBLIC_BASE_URL}/webhooks/neynar",
+                                    build_webhook_url(config.PUBLIC_BASE_URL),
                                     all_fids
                                 )
                                 if not new_webhook or "webhook" not in new_webhook or "webhook_id" not in new_webhook["webhook"]:
