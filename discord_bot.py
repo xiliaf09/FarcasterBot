@@ -599,6 +599,68 @@ async def debug_cast_command(ctx, fid_or_username: str):
         logger.error(f"Erreur dans la commande debug-cast: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='check-webhook')
+async def check_webhook_command(ctx):
+    """Commande pour vérifier l'état du webhook fixe 01K45KREDQ77B80YD87AAXJ3E8"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        embed = discord.Embed(
+            title="🔍 Vérification du Webhook Fixe",
+            description="Vérification en cours de l'état du webhook 01K45KREDQ77B80YD87AAXJ3E8...",
+            color=0x00BFFF
+        )
+        embed.set_footer(text="Farcaster Tracker Bot")
+        
+        message = await ctx.reply(embed=embed)
+        
+        try:
+            from webhook_sync import get_webhook_stats
+            stats = get_webhook_stats()
+            
+            if stats.get("status") == "active":
+                embed.description = "✅ **Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 ACTIF !**"
+                embed.color = 0x00FF00
+                embed.add_field(
+                    name="🔒 Webhook Fixe",
+                    value=f"ID: {stats.get('webhook_id', 'N/A')}\nStatut: Actif\nFIDs configurés: {stats.get('author_fids_count', 0)}",
+                    inline=False
+                )
+            elif stats.get("status") == "inactive":
+                embed.description = "⚠️ **Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 INACTIF !**"
+                embed.color = 0xFFFF00
+                embed.add_field(
+                    name="⚠️ Attention",
+                    value="Le webhook existe mais est inactif côté Neynar",
+                    inline=False
+                )
+            else:
+                embed.description = "❌ **Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 INTROUVABLE !**"
+                embed.color = 0xFF0000
+                embed.add_field(
+                    name="❌ Problème",
+                    value="Le webhook n'existe plus côté Neynar - il faut le recréer",
+                    inline=False
+                )
+                
+        except Exception as e:
+            embed.description = "❌ **Erreur lors de la vérification**"
+            embed.color = 0xFF0000
+            embed.add_field(
+                name="❌ Erreur",
+                value=f"Erreur: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        logger.info(f"Vérification du webhook effectuée dans {ctx.guild.name} par {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande check-webhook: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='force-webhook')
 async def force_webhook_command(ctx):
     """Commande pour forcer l'utilisation du webhook fixe 01K45KREDQ77B80YD87AAXJ3E8"""
@@ -676,6 +738,7 @@ async def far_help(ctx):
         value="""
         `!setchannel <#channel>` - Définir le salon par défaut
         `!test` - Envoyer un message de test
+        `!check-webhook` - Vérifier l'état du webhook fixe
         `!force-webhook` - Forcer l'utilisation du webhook fixe
         `!far-help` - Afficher cette aide
         """,
