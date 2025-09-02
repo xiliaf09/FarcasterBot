@@ -371,7 +371,7 @@ async def neynar_webhook(request: Request):
         from database import TrackedAccount
         
         # Créer une session DB manuellement
-        db = get_session_local()
+        db = get_session_local()()
         try:
             tracked_accounts = db.query(TrackedAccount).filter(
                 TrackedAccount.fid == str(author.get('fid'))
