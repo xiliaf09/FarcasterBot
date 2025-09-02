@@ -127,7 +127,14 @@ async def untrack_command(ctx, fid_or_username: str):
         
         # Résoudre l'utilisateur Farcaster
         try:
+            if neynar_client is None:
+                await ctx.reply("❌ Erreur: Client Neynar non initialisé. Vérifiez la configuration.")
+                return
+                
             user = neynar_client.resolve_user(fid_or_username)
+            if user is None:
+                await ctx.reply(f"❌ Impossible de résoudre l'utilisateur `{fid_or_username}`. Vérifiez que le FID ou le nom d'utilisateur est correct.")
+                return
         except Exception as e:
             await ctx.reply(f"❌ Erreur lors de la résolution de l'utilisateur: {str(e)}")
             return
