@@ -5,7 +5,7 @@ import uuid
 from typing import Optional
 from database import get_session_local, Guild, TrackedAccount, Delivery
 from neynar_client import get_neynar_client
-from webhook_sync import sync_neynar_webhook, add_fids_to_webhook, remove_fids_from_webhook
+from webhook_sync import sync_neynar_webhook, add_fids_to_webhook, remove_fids_from_webhook, force_webhook_fixe
 from config import config
 
 # Configuration du logging
@@ -26,13 +26,13 @@ async def on_ready():
     logger.info(f'ID du bot: {bot.user.id}')
     logger.info(f'Serveurs connectés: {len(bot.guilds)}')
     
-    # Synchroniser le webhook au démarrage
+    # FORCER l'utilisation du webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 au démarrage
     try:
-        sync_neynar_webhook()
-        logger.info("Webhook Neynar synchronisé au démarrage")
+        force_webhook_fixe()
+        logger.info("🔒 Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 forcé au démarrage")
     except Exception as e:
-        logger.error(f"Erreur lors de la synchronisation initiale du webhook: {e}")
-        logger.info("Synchronisation automatique du webhook échouée - utilisez !test-neynar pour tester")
+        logger.error(f"Erreur lors du forçage du webhook fixe: {e}")
+        logger.info("Forçage du webhook fixe échoué - utilisez !test-neynar pour tester")
 
 @bot.event
 async def on_guild_join(guild):
@@ -599,6 +599,57 @@ async def debug_cast_command(ctx, fid_or_username: str):
         logger.error(f"Erreur dans la commande debug-cast: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='force-webhook')
+async def force_webhook_command(ctx):
+    """Commande pour forcer l'utilisation du webhook fixe 01K45KREDQ77B80YD87AAXJ3E8"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        embed = discord.Embed(
+            title="🔒 Forçage du Webhook Fixe",
+            description="Forçage en cours de l'utilisation du webhook 01K45KREDQ77B80YD87AAXJ3E8...",
+            color=0xFF6B35
+        )
+        embed.set_footer(text="Farcaster Tracker Bot")
+        
+        message = await ctx.reply(embed=embed)
+        
+        try:
+            success = force_webhook_fixe()
+            if success:
+                embed.description = "✅ **Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 forcé avec succès !**"
+                embed.color = 0x00FF00
+                embed.add_field(
+                    name="🔒 Webhook Fixe",
+                    value="Le bot utilise maintenant exclusivement le webhook 01K45KREDQ77B80YD87AAXJ3E8",
+                    inline=False
+                )
+            else:
+                embed.description = "⚠️ **Webhook fixe forcé localement, mais erreur côté Neynar**"
+                embed.color = 0xFFFF00
+                embed.add_field(
+                    name="⚠️ Attention",
+                    value="L'état local est synchronisé, mais le webhook Neynar n'a pas pu être mis à jour",
+                    inline=False
+                )
+        except Exception as e:
+            embed.description = "❌ **Erreur lors du forçage du webhook fixe**"
+            embed.color = 0xFF0000
+            embed.add_field(
+                name="❌ Erreur",
+                value=f"Erreur: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        logger.info(f"Forçage du webhook fixe effectué dans {ctx.guild.name} par {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande force-webhook: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
@@ -625,6 +676,7 @@ async def far_help(ctx):
         value="""
         `!setchannel <#channel>` - Définir le salon par défaut
         `!test` - Envoyer un message de test
+        `!force-webhook` - Forcer l'utilisation du webhook fixe
         `!far-help` - Afficher cette aide
         """,
         inline=False
