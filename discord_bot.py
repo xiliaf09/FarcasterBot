@@ -411,14 +411,26 @@ async def lastcast_command(ctx, fid_or_username: str):
         
         # Récupérer le dernier cast
         try:
-            # Utiliser get_user_feed pour récupérer le dernier cast
-            feed = client.get_user_feed(user['fid'], limit=1)
+            # Utiliser search_casts avec le username pour récupérer le dernier cast
+            search_query = f"from:{user['username']}"
+            search_result = client.search_casts(search_query, limit=10)
             
-            if not feed.get("casts") or len(feed["casts"]) == 0:
+            if not search_result.get("casts") or len(search_result["casts"]) == 0:
                 await ctx.reply(f"📝 Aucun cast trouvé pour `{user['username']}` (FID: {user['fid']})")
                 return
             
-            cast = feed["casts"][0]  # Le premier (le plus récent)
+            # Trier par timestamp pour avoir le plus récent
+            casts = search_result["casts"]
+            casts.sort(key=lambda x: x.get("timestamp", 0), reverse=True)
+            cast = casts[0]  # Le plus récent
+            
+            logger.info(f"🔧 Cast trouvé: {cast.get('text', 'N/A')} - Hash: {cast.get('hash', 'N/A')}")
+            logger.info(f"🔧 Timestamp du cast: {cast.get('timestamp', 'N/A')}")
+            logger.info(f"🔧 Nombre total de casts trouvés: {len(casts)}")
+            
+            # Log des premiers casts pour debug
+            for i, c in enumerate(casts[:3]):
+                logger.info(f"🔧 Cast {i+1}: {c.get('text', 'N/A')[:50]}... - Hash: {c.get('hash', 'N/A')}")
             
             # Créer un embed avec les détails du cast
             embed = discord.Embed(
@@ -438,10 +450,24 @@ async def lastcast_command(ctx, fid_or_username: str):
             
             # Ajouter le lien direct vers le cast
             if cast.get("hash"):
-                cast_url = f"https://warpcast.com/{user['username']}/{cast['hash']}"
+                # Vérifier que le hash est valide (commence par 0x)
+                if cast['hash'].startswith('0x'):
+                    cast_url = f"https://warpcast.com/{user['username']}/{cast['hash']}"
+                    embed.add_field(
+                        name="🔗 Voir le Cast",
+                        value=f"[Cliquer ici pour voir sur Warpcast]({cast_url})",
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="⚠️ Hash Invalide",
+                        value=f"Hash du cast invalide: `{cast['hash']}`",
+                        inline=False
+                    )
+            else:
                 embed.add_field(
-                    name="🔗 Voir le Cast",
-                    value=f"[Cliquer ici pour voir sur Warpcast]({cast_url})",
+                    name="⚠️ Hash Manquant",
+                    value="Hash du cast non disponible",
                     inline=False
                 )
             
