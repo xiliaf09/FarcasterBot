@@ -11,13 +11,20 @@ class NeynarClient:
     """Client pour l'API Neynar selon la documentation officielle avec gestion des rate limits"""
     
     def __init__(self):
+        logger.info("🔧 Initialisation de la classe NeynarClient...")
+        
         self.api_key = config.NEYNAR_API_KEY
+        logger.info(f"✅ API Key récupérée: {self.api_key[:10] if self.api_key else 'None'}...")
+        
         self.base_url = "https://api.neynar.com"
+        logger.info(f"✅ Base URL définie: {self.base_url}")
+        
         self.headers = {
             "Accept": "application/json",
             "x-api-key": self.api_key,  # Correction selon la doc officielle
             "Content-Type": "application/json"
         }
+        logger.info(f"✅ Headers configurés: {list(self.headers.keys())}")
         
         # Gestion des rate limits selon la documentation
         self.rate_limits = {
@@ -25,12 +32,16 @@ class NeynarClient:
             "growth": {"rpm": 600, "rps": 10},
             "scale": {"rpm": 1200, "rps": 20}
         }
+        logger.info(f"✅ Rate limits configurés: {list(self.rate_limits.keys())}")
         
         # Plan par défaut (starter) - à ajuster selon votre plan
         self.current_plan = "starter"
         self.last_request_time = 0
         self.requests_this_minute = 0
         self.minute_start = time.time()
+        logger.info(f"✅ Plan par défaut: {self.current_plan}")
+        
+        logger.info("✅ Classe NeynarClient initialisée avec succès")
     
     def _handle_rate_limits(self):
         """Gérer les rate limits selon la documentation officielle"""
@@ -210,15 +221,28 @@ def get_neynar_client():
     
     if _neynar_client_instance is None:
         try:
+            logger.info("🔧 Tentative d'initialisation du client Neynar...")
+            
             # Vérifier que la configuration est valide
-            if not hasattr(config, 'NEYNAR_API_KEY') or not config.NEYNAR_API_KEY:
-                logger.error("NEYNAR_API_KEY non configurée")
+            if not hasattr(config, 'NEYNAR_API_KEY'):
+                logger.error("❌ NEYNAR_API_KEY n'existe pas dans config")
                 return None
             
+            if not config.NEYNAR_API_KEY:
+                logger.error("❌ NEYNAR_API_KEY est vide ou None")
+                return None
+            
+            logger.info(f"✅ NEYNAR_API_KEY trouvée: {config.NEYNAR_API_KEY[:10]}...")
+            logger.info(f"✅ Base URL: {config.PUBLIC_BASE_URL}")
+            
             _neynar_client_instance = NeynarClient()
-            logger.info("Client Neynar initialisé avec succès")
+            logger.info("✅ Client Neynar initialisé avec succès")
+            
         except Exception as e:
-            logger.error(f"Erreur lors de l'initialisation du client Neynar: {e}")
+            logger.error(f"❌ Erreur lors de l'initialisation du client Neynar: {e}")
+            logger.error(f"❌ Type d'erreur: {type(e).__name__}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             return None
     
     return _neynar_client_instance
