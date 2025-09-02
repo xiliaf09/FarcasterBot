@@ -84,6 +84,15 @@ def get_db() -> Session:
     finally:
         db.close()
 
+def get_session_local():
+    """Obtenir SessionLocal avec initialisation automatique"""
+    global SessionLocal
+    
+    if SessionLocal is None:
+        init_database_connection()
+    
+    return SessionLocal
+
 def init_db():
     """Initialiser la base de données"""
     if engine is None:

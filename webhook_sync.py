@@ -2,7 +2,7 @@ import json
 import logging
 import time
 from typing import List
-from database import SessionLocal, WebhookState, TrackedAccount
+from database import get_session_local, WebhookState, TrackedAccount
 from neynar_client import get_neynar_client
 from config import config
 
@@ -19,7 +19,7 @@ def sync_neynar_webhook():
             return
         
         # Récupérer tous les FIDs suivis (toutes guilds confondues)
-        db = SessionLocal()
+        db = get_session_local()
         try:
             tracked_accounts = db.query(TrackedAccount.fid).distinct().all()
             all_fids = [account[0] for account in tracked_accounts]
@@ -97,7 +97,7 @@ def sync_neynar_webhook():
 
 def get_webhook_state():
     """Récupérer l'état actuel du webhook"""
-    db = SessionLocal()
+    db = get_session_local()
     try:
         return db.query(WebhookState).filter_by(id="singleton").first()
     finally:
@@ -112,7 +112,7 @@ def cleanup_webhook():
                 get_neynar_client().delete_webhook(webhook_state.webhook_id)
                 logger.info(f"Webhook Neynar {webhook_state.webhook_id} supprimé")
                 
-                db = SessionLocal()
+                db = get_session_local()
                 try:
                     db.delete(webhook_state)
                     db.commit()
@@ -154,7 +154,7 @@ def get_webhook_stats():
     try:
         logger.info("🔧 Tentative de récupération des stats du webhook...")
         
-        db = SessionLocal()
+        db = get_session_local()
         try:
             webhook_state = db.query(WebhookState).filter_by(id="singleton").first()
             
