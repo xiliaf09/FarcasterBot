@@ -150,22 +150,52 @@ def test_webhook_connection():
         return False
 
 def get_webhook_stats():
-    """Récupérer les statistiques du webhook selon la documentation officielle"""
+    """Récupérer les statistiques du webhook Neynar"""
     try:
-        webhook_state = get_webhook_state()
-        if not webhook_state:
-            return {"status": "no_webhook"}
+        logger.info("🔧 Tentative de récupération des stats du webhook...")
         
-        webhook_details = get_neynar_client().get_webhook(webhook_state.webhook_id)
-        
-        return {
-            "status": "active" if webhook_details.get("active") else "inactive",
-            "webhook_id": webhook_state.webhook_id,
-            "author_fids_count": len(json.loads(webhook_state.author_fids)),
-            "last_updated": webhook_state.updated_at.isoformat() if webhook_state.updated_at else None,
-            "webhook_details": webhook_details
-        }
-        
+        db = SessionLocal()
+        try:
+            webhook_state = db.query(WebhookState).filter_by(id="singleton").first()
+            
+            if not webhook_state:
+                logger.info("📝 Aucun état de webhook trouvé")
+                return {"status": "no_webhook", "message": "Aucun webhook configuré"}
+            
+            logger.info(f"🔧 État du webhook trouvé: {webhook_state.webhook_id}")
+            
+            client = get_neynar_client()
+            logger.info(f"🔧 Client Neynar récupéré: {client}")
+            
+            if client is None:
+                logger.error("❌ Client Neynar est None - vérification de la configuration")
+                return {"status": "error", "message": "Client Neynar non initialisé"}
+            
+            logger.info(f"🔧 Client Neynar valide: {type(client).__name__}")
+            
+            webhook_details = client.get_webhook(webhook_state.webhook_id)
+            logger.info(f"🔧 Détails du webhook récupérés: {webhook_details}")
+            
+            if webhook_details.get("active"):
+                return {
+                    "status": "active",
+                    "webhook_id": webhook_state.webhook_id,
+                    "author_fids_count": len(json.loads(webhook_state.author_fids)),
+                    "message": "Webhook actif"
+                }
+            else:
+                return {
+                    "status": "inactive",
+                    "webhook_id": webhook_state.webhook_id,
+                    "message": "Webhook inactif"
+                }
+                
+        finally:
+            db.close()
+            
     except Exception as e:
-        logger.error(f"Erreur lors de la récupération des stats: {e}")
+        logger.error(f"❌ Erreur lors de la récupération des stats: {e}")
+        logger.error(f"❌ Type d'erreur: {type(e).__name__}")
+        import traceback
+        logger.error(f"❌ Traceback: {traceback.format_exc()}")
         return {"status": "error", "message": str(e)}

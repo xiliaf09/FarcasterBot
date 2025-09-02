@@ -69,8 +69,30 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
         
         # Résoudre l'utilisateur Farcaster
         try:
-            user = get_neynar_client().resolve_user(fid_or_username)
+            logger.info("🔧 Tentative de résolution de l'utilisateur...")
+            
+            client = get_neynar_client()
+            logger.info(f"🔧 Client Neynar récupéré: {client}")
+            
+            if client is None:
+                logger.error("❌ Client Neynar est None - vérification de la configuration")
+                await ctx.reply("❌ Erreur: Client Neynar non initialisé. Vérifiez la configuration.")
+                return
+                
+            logger.info(f"🔧 Client Neynar valide: {type(client).__name__}")
+            logger.info(f"🔧 Méthodes disponibles: {[m for m in dir(client) if not m.startswith('_')]}")
+            
+            user = client.resolve_user(fid_or_username)
+            logger.info(f"🔧 Utilisateur résolu: {user}")
+            
+            if user is None:
+                await ctx.reply(f"❌ Impossible de résoudre l'utilisateur `{fid_or_username}`. Vérifiez que le FID ou le nom d'utilisateur est correct.")
+                return
         except Exception as e:
+            logger.error(f"❌ Erreur lors de la résolution de l'utilisateur: {e}")
+            logger.error(f"❌ Type d'erreur: {type(e).__name__}")
+            import traceback
+            logger.error(f"❌ Traceback: {traceback.format_exc()}")
             await ctx.reply(f"❌ Erreur lors de la résolution de l'utilisateur: {str(e)}")
             return
         
