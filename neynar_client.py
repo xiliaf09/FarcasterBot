@@ -210,7 +210,16 @@ class NeynarClient:
         }
         
         logger.info(f"🔧 Mise à jour webhook avec payload: {payload}")
-        return self._make_request(f"/v2/farcaster/webhook/{webhook_id}", method="PUT", data=payload)
+        
+        # Essayer d'abord v2, puis v1 si v2 échoue
+        try:
+            return self._make_request(f"/v2/farcaster/webhook/{webhook_id}", method="PUT", data=payload)
+        except Exception as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                logger.info(f"🔧 Endpoint v2 échoué, tentative avec v1 pour webhook {webhook_id}")
+                return self._make_request(f"/v1/farcaster/webhook/{webhook_id}", method="PUT", data=payload)
+            else:
+                raise
     
     def delete_webhook(self, webhook_id: str) -> None:
         """Supprimer un webhook"""
@@ -218,7 +227,15 @@ class NeynarClient:
     
     def get_webhook(self, webhook_id: str) -> Dict:
         """Récupérer les détails d'un webhook"""
-        return self._make_request(f"/v2/farcaster/webhook/{webhook_id}")
+        # Essayer d'abord v2, puis v1 si v2 échoue
+        try:
+            return self._make_request(f"/v2/farcaster/webhook/{webhook_id}")
+        except Exception as e:
+            if "404" in str(e) or "not found" in str(e).lower():
+                logger.info(f"🔧 Endpoint v2 échoué, tentative avec v1 pour webhook {webhook_id}")
+                return self._make_request(f"/v1/farcaster/webhook/{webhook_id}")
+            else:
+                raise
     
     def get_user_feed(self, fid: int, limit: int = 25, include_replies: bool = True, viewer_fid: int = None) -> Dict:
         """Récupérer les casts d'un utilisateur selon la doc officielle v2"""
