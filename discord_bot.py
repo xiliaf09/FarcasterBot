@@ -934,6 +934,146 @@ async def test_api_command(ctx):
         logger.error(f"Erreur dans la commande test-api: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='test-webhook-endpoints')
+async def test_webhook_endpoints_command(ctx):
+    """Commande pour tester différents endpoints webhook v2"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        embed = discord.Embed(
+            title="🧪 Test Endpoints Webhook v2",
+            description="Test des différents endpoints webhook v2...",
+            color=0x00BFFF
+        )
+        embed.set_footer(text="Farcaster Tracker Bot")
+        
+        message = await ctx.reply(embed=embed)
+        
+        webhook_id = config.NEYNAR_WEBHOOK_ID
+        client = get_neynar_client()
+        
+        if client is None:
+            await ctx.reply("❌ Client Neynar non initialisé")
+            return
+        
+        # Test 1: Endpoint actuel
+        try:
+            import requests
+            headers = client.headers
+            
+            # Test 1a: /v2/farcaster/webhook/{id}
+            response = requests.get(
+                f"https://api.neynar.com/v2/farcaster/webhook/{webhook_id}",
+                headers=headers,
+                timeout=10
+            )
+            embed.add_field(
+                name="1️⃣ /v2/farcaster/webhook/{id}",
+                value=f"Status: {response.status_code}\nResponse: {response.text[:100]}...",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="1️⃣ /v2/farcaster/webhook/{id}",
+                value=f"Erreur: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 2: Endpoint alternatif
+        try:
+            # Test 2a: /v2/farcaster/webhooks/{id}
+            response = requests.get(
+                f"https://api.neynar.com/v2/farcaster/webhooks/{webhook_id}",
+                headers=headers,
+                timeout=10
+            )
+            embed.add_field(
+                name="2️⃣ /v2/farcaster/webhooks/{id}",
+                value=f"Status: {response.status_code}\nResponse: {response.text[:100]}...",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="2️⃣ /v2/farcaster/webhooks/{id}",
+                value=f"Erreur: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 3: Endpoint avec query params
+        try:
+            # Test 3a: /v2/farcaster/webhook?id={id}
+            response = requests.get(
+                f"https://api.neynar.com/v2/farcaster/webhook?id={webhook_id}",
+                headers=headers,
+                timeout=10
+            )
+            embed.add_field(
+                name="3️⃣ /v2/farcaster/webhook?id={id}",
+                value=f"Status: {response.status_code}\nResponse: {response.text[:100]}...",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="3️⃣ /v2/farcaster/webhook?id={id}",
+                value=f"Erreur: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 4: Lister tous les webhooks
+        try:
+            # Test 4a: /v2/farcaster/webhooks (liste)
+            response = requests.get(
+                "https://api.neynar.com/v2/farcaster/webhooks",
+                headers=headers,
+                timeout=10
+            )
+            if response.status_code == 200:
+                webhooks = response.json()
+                webhook_list = []
+                if isinstance(webhooks, list):
+                    for wh in webhooks[:3]:  # Limiter à 3 pour l'affichage
+                        webhook_list.append(f"ID: {wh.get('id', 'N/A')}, Active: {wh.get('active', 'N/A')}")
+                elif isinstance(webhooks, dict) and 'webhooks' in webhooks:
+                    for wh in webhooks['webhooks'][:3]:
+                        webhook_list.append(f"ID: {wh.get('id', 'N/A')}, Active: {wh.get('active', 'N/A')}")
+                
+                embed.add_field(
+                    name="4️⃣ /v2/farcaster/webhooks (liste)",
+                    value=f"Status: {response.status_code}\nWebhooks: {', '.join(webhook_list) if webhook_list else 'Aucun'}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="4️⃣ /v2/farcaster/webhooks (liste)",
+                    value=f"Status: {response.status_code}\nResponse: {response.text[:100]}...",
+                    inline=False
+                )
+        except Exception as e:
+            embed.add_field(
+                name="4️⃣ /v2/farcaster/webhooks (liste)",
+                value=f"Erreur: {str(e)}",
+                inline=False
+            )
+        
+        # Mise à jour finale
+        embed.description = "Test des endpoints webhook terminé"
+        embed.color = 0x00FF00 if any("200" in field.value for field in embed.fields) else 0xFF0000
+        await message.edit(embed=embed)
+        
+        logger.info(f"Test endpoints webhook effectué dans {ctx.guild.name} par {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande test-webhook-endpoints: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
