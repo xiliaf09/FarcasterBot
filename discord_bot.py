@@ -716,6 +716,102 @@ async def force_webhook_command(ctx):
         logger.error(f"Erreur dans la commande force-webhook: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
+@bot.command(name='debug-webhook')
+async def debug_webhook_command(ctx):
+    """Commande de debug pour tester l'API webhook Neynar"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        embed = discord.Embed(
+            title="🔍 Debug Webhook Neynar",
+            description="Test de l'API webhook en cours...",
+            color=0x00BFFF
+        )
+        embed.set_footer(text="Farcaster Tracker Bot")
+        
+        message = await ctx.reply(embed=embed)
+        
+        # Test 1: Vérifier la configuration
+        webhook_id = config.NEYNAR_WEBHOOK_ID
+        embed.add_field(
+            name="1️⃣ Configuration",
+            value=f"✅ Webhook ID: `{webhook_id}`\n✅ API Key: `{config.NEYNAR_API_KEY[:10]}...`\n✅ Base URL: `{config.PUBLIC_BASE_URL}`",
+            inline=False
+        )
+        await message.edit(embed=embed)
+        
+        # Test 2: Test de récupération du webhook
+        try:
+            client = get_neynar_client()
+            if client is None:
+                embed.add_field(
+                    name="2️⃣ Client Neynar",
+                    value="❌ Client Neynar non initialisé",
+                    inline=False
+                )
+                await message.edit(embed=embed)
+                return
+            
+            webhook_details = client.get_webhook(webhook_id)
+            embed.add_field(
+                name="2️⃣ Récupération Webhook",
+                value=f"✅ Webhook récupéré avec succès\n📊 Statut: `{webhook_details.get('active', 'N/A')}`\n🔗 URL: `{webhook_details.get('url', 'N/A')}`",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="2️⃣ Récupération Webhook",
+                value=f"❌ Erreur: {str(e)}\n🔍 Code: {getattr(e, 'response', {}).get('status_code', 'N/A')}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 3: Test de mise à jour du webhook
+        try:
+            # Récupérer les FIDs actuels de la base
+            db = get_session_local()()
+            try:
+                tracked_accounts = db.query(TrackedAccount.fid).distinct().all()
+                current_fids = [int(account[0]) for account in tracked_accounts]
+                
+                if current_fids:
+                    # Tester la mise à jour avec les FIDs actuels
+                    updated_webhook = client.update_webhook(webhook_id, current_fids)
+                    embed.add_field(
+                        name="3️⃣ Mise à jour Webhook",
+                        value=f"✅ Webhook mis à jour avec succès\n📊 FIDs configurés: {len(current_fids)}\n🔢 FIDs: `{current_fids[:5]}{'...' if len(current_fids) > 5 else ''}`",
+                        inline=False
+                    )
+                else:
+                    embed.add_field(
+                        name="3️⃣ Mise à jour Webhook",
+                        value="⚠️ Aucun FID à configurer (base vide)",
+                        inline=False
+                    )
+            finally:
+                db.close()
+                
+        except Exception as e:
+            embed.add_field(
+                name="3️⃣ Mise à jour Webhook",
+                value=f"❌ Erreur: {str(e)}\n🔍 Code: {getattr(e, 'response', {}).get('status_code', 'N/A')}",
+                inline=False
+            )
+        
+        # Mise à jour finale
+        embed.description = "Test de l'API webhook terminé"
+        embed.color = 0x00FF00 if "✅" in str(embed.fields[-1].value) else 0xFF0000
+        await message.edit(embed=embed)
+        
+        logger.info(f"Debug webhook effectué dans {ctx.guild.name} par {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande debug-webhook: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
 @bot.command(name='far-help')
 async def far_help(ctx):
     """Afficher l'aide pour les commandes Farcaster"""
@@ -744,6 +840,7 @@ async def far_help(ctx):
         `!test` - Envoyer un message de test
         `!check-webhook` - Vérifier l'état du webhook fixe
         `!force-webhook` - Forcer l'utilisation du webhook fixe
+        `!debug-webhook` - Debug de l'API webhook Neynar
         `!far-help` - Afficher cette aide
         """,
         inline=False

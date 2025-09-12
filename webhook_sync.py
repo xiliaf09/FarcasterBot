@@ -39,28 +39,29 @@ def sync_neynar_webhook():
             webhook_state = db.query(WebhookState).filter_by(id="singleton").first()
             
             if not webhook_state:
-                # FORCER L'UTILISATION DU WEBHOOK EXISTANT 01K45KREDQ77B80YD87AAXJ3E8
-                logger.info("🔒 Aucun état de webhook trouvé, utilisation FORCÉE du webhook existant 01K45KREDQ77B80YD87AAXJ3E8")
+                # FORCER L'UTILISATION DU WEBHOOK CONFIGURÉ
+                webhook_id = config.NEYNAR_WEBHOOK_ID
+                logger.info(f"🔒 Aucun état de webhook trouvé, utilisation FORCÉE du webhook {webhook_id}")
                 
-                # Créer l'état local avec le webhook existant
+                # Créer l'état local avec le webhook configuré
                 webhook_state = WebhookState(
                     id="singleton",
-                    webhook_id="01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
+                    webhook_id=webhook_id,
                     active=True,
                     author_fids=json.dumps(all_fids)
                 )
                 db.add(webhook_state)
                 db.commit()
                 
-                logger.info("✅ État local créé avec le webhook fixe 01K45KREDQ77B80YD87AAXJ3E8")
+                logger.info(f"✅ État local créé avec le webhook {webhook_id}")
                 
                 # Mettre à jour le webhook existant avec les FIDs actuels
                 try:
                     updated_webhook = get_neynar_client().update_webhook(
-                        "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
+                        webhook_id,
                         all_fids
                     )
-                    logger.info("✅ Webhook existant 01K45KREDQ77B80YD87AAXJ3E8 mis à jour avec les FIDs actuels")
+                    logger.info(f"✅ Webhook existant {webhook_id} mis à jour avec les FIDs actuels")
                 except Exception as e:
                     logger.warning(f"⚠️ Impossible de mettre à jour le webhook existant: {e}")
                     logger.warning("⚠️ Mais l'état local est créé et le webhook sera utilisé")
@@ -71,45 +72,46 @@ def sync_neynar_webhook():
                 current_fids.sort()
                 new_fids = sorted(all_fids)
                 
-                # FORCER L'UTILISATION DU WEBHOOK FIXE 01K45KREDQ77B80YD87AAXJ3E8
-                if webhook_state.webhook_id != "01K45KREDQ77B80YD87AAXJ3E8":
-                    logger.warning("🔒 Webhook ID différent du webhook fixe, FORCAGE de l'utilisation du webhook 01K45KREDQ77B80YD87AAXJ3E8")
-                    webhook_state.webhook_id = "01K45KREDQ77B80YD87AAXJ3E8"
+                # FORCER L'UTILISATION DU WEBHOOK CONFIGURÉ
+                webhook_id = config.NEYNAR_WEBHOOK_ID
+                if webhook_state.webhook_id != webhook_id:
+                    logger.warning(f"🔒 Webhook ID différent du webhook configuré, FORCAGE de l'utilisation du webhook {webhook_id}")
+                    webhook_state.webhook_id = webhook_id
                     db.commit()
-                    logger.info("✅ Webhook ID forcé sur 01K45KREDQ77B80YD87AAXJ3E8")
+                    logger.info(f"✅ Webhook ID forcé sur {webhook_id}")
                 
-                # Vérifier l'état du webhook fixe côté Neynar
+                # Vérifier l'état du webhook configuré côté Neynar
                 try:
-                    webhook_details = get_neynar_client().get_webhook("01K45KREDQ77B80YD87AAXJ3E8")
+                    webhook_details = get_neynar_client().get_webhook(webhook_id)
                     if not webhook_details or not webhook_details.get("active"):
-                        logger.warning("⚠️ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 inactif côté Neynar, tentative de réactivation...")
+                        logger.warning(f"⚠️ Webhook {webhook_id} inactif côté Neynar, tentative de réactivation...")
                         try:
-                            # Réactiver le webhook fixe avec les FIDs actuels
+                            # Réactiver le webhook configuré avec les FIDs actuels
                             reactivated_webhook = get_neynar_client().update_webhook(
-                                "01K45KREDQ77B80YD87AAXJ3E8",
+                                webhook_id,
                                 all_fids
                             )
-                            logger.info("✅ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 réactivé")
+                            logger.info(f"✅ Webhook {webhook_id} réactivé")
                             # Mettre à jour l'état local
                             webhook_state.author_fids = json.dumps(all_fids)
                             webhook_state.updated_at = time.time()
                             db.commit()
                         except Exception as reactivate_error:
-                            logger.error(f"❌ Impossible de réactiver le webhook fixe: {reactivate_error}")
+                            logger.error(f"❌ Impossible de réactiver le webhook {webhook_id}: {reactivate_error}")
                             logger.warning("⚠️ Mais on continue avec l'état local existant")
                     else:
-                        logger.info("✅ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 actif et accessible")
+                        logger.info(f"✅ Webhook {webhook_id} actif et accessible")
                 except Exception as check_error:
-                    logger.warning(f"⚠️ Impossible de vérifier l'état du webhook fixe: {check_error}")
+                    logger.warning(f"⚠️ Impossible de vérifier l'état du webhook {webhook_id}: {check_error}")
                     logger.warning("⚠️ Mais on continue avec l'état local existant")
                 
                 if current_fids != new_fids:
                     logger.info(f"FIDs modifiés, mise à jour du webhook... Anciens: {current_fids}, Nouveaux: {new_fids}")
                     
                     try:
-                        # Mettre à jour le webhook fixe 01K45KREDQ77B80YD87AAXJ3E8
+                        # Mettre à jour le webhook configuré
                         updated_webhook = get_neynar_client().update_webhook(
-                            "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
+                            webhook_id,
                             all_fids
                         )
                         
@@ -118,7 +120,7 @@ def sync_neynar_webhook():
                         webhook_state.updated_at = time.time()
                         db.commit()
                         
-                        logger.info("✅ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 mis à jour avec succès")
+                        logger.info(f"✅ Webhook {webhook_id} mis à jour avec succès")
                         
                     except Exception as e:
                         logger.error(f"Erreur lors de la mise à jour du webhook: {e}")
@@ -230,21 +232,22 @@ def get_webhook_stats():
             
             logger.info(f"🔧 Client Neynar valide: {type(client).__name__}")
             
-            webhook_details = client.get_webhook("01K45KREDQ77B80YD87AAXJ3E8")  # WEBHOOK FIXE
+            webhook_id = config.NEYNAR_WEBHOOK_ID
+            webhook_details = client.get_webhook(webhook_id)
             logger.info(f"🔧 Détails du webhook fixe récupérés: {webhook_details}")
             
             if webhook_details.get("active"):
                 return {
                     "status": "active",
-                    "webhook_id": "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
+                    "webhook_id": webhook_id,
                     "author_fids_count": len(json.loads(webhook_state.author_fids)),
-                    "message": "Webhook fixe actif"
+                    "message": f"Webhook {webhook_id} actif"
                 }
             else:
                 return {
                     "status": "inactive",
-                    "webhook_id": "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
-                    "message": "Webhook fixe inactif"
+                    "webhook_id": webhook_id,
+                    "message": f"Webhook {webhook_id} inactif"
                 }
                 
         finally:
@@ -315,13 +318,13 @@ def force_webhook_fixe():
                         logger.warning("⚠️ Mais l'état local est synchronisé")
                         return False
                 else:
-                    logger.warning("⚠️ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 n'existe plus ou est inactif côté Neynar")
+                    logger.warning(f"⚠️ Webhook {webhook_id} n'existe plus ou est inactif côté Neynar")
                     logger.warning("⚠️ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                     
             except Exception as e:
                 if "404" in str(e) or "not found" in str(e).lower():
-                    logger.error("❌ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 N'EXISTE PLUS côté Neynar !")
+                    logger.error(f"❌ Webhook {webhook_id} N'EXISTE PLUS côté Neynar !")
                     logger.error("❌ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                 else:
@@ -366,16 +369,17 @@ def add_fids_to_webhook(new_fids: List[str]):
             
             # VÉRIFIER D'ABORD SI LE WEBHOOK EXISTE ENCORE CÔTÉ NEYNAR
             try:
-                webhook_details = get_neynar_client().get_webhook("01K45KREDQ77B80YD87AAXJ3E8")
+                webhook_id = config.NEYNAR_WEBHOOK_ID
+                webhook_details = get_neynar_client().get_webhook(webhook_id)
                 if webhook_details and webhook_details.get("active"):
-                    logger.info("✅ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 existe et est actif côté Neynar")
+                    logger.info(f"✅ Webhook {webhook_id} existe et est actif côté Neynar")
                     
-                    # Mettre à jour le webhook fixe 01K45KREDQ77B80YD87AAXJ3E8
+                    # Mettre à jour le webhook configuré
                     try:
                         # Convertir les FIDs en entiers pour l'API Neynar
                         updated_fids_int = [int(fid) for fid in updated_fids]
                         updated_webhook = get_neynar_client().update_webhook(
-                            "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
+                            webhook_id,
                             updated_fids_int
                         )
                         
@@ -384,7 +388,7 @@ def add_fids_to_webhook(new_fids: List[str]):
                         webhook_state.updated_at = time.time()
                         db.commit()
                         
-                        logger.info("✅ FIDs ajoutés au webhook fixe 01K45KREDQ77B80YD87AAXJ3E8")
+                        logger.info(f"✅ FIDs ajoutés au webhook {webhook_id}")
                         return True
                         
                     except Exception as update_error:
@@ -393,13 +397,13 @@ def add_fids_to_webhook(new_fids: List[str]):
                         return False
                         
                 else:
-                    logger.warning("⚠️ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 n'existe plus ou est inactif côté Neynar")
+                    logger.warning(f"⚠️ Webhook {webhook_id} n'existe plus ou est inactif côté Neynar")
                     logger.warning("⚠️ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                     
             except Exception as e:
                 if "404" in str(e) or "not found" in str(e).lower():
-                    logger.error("❌ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 N'EXISTE PLUS côté Neynar !")
+                    logger.error(f"❌ Webhook {webhook_id} N'EXISTE PLUS côté Neynar !")
                     logger.error("❌ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                 else:
@@ -444,16 +448,17 @@ def remove_fids_from_webhook(fids_to_remove: List[str]):
             
             # VÉRIFIER D'ABORD SI LE WEBHOOK EXISTE ENCORE CÔTÉ NEYNAR
             try:
-                webhook_details = get_neynar_client().get_webhook("01K45KREDQ77B80YD87AAXJ3E8")
+                webhook_id = config.NEYNAR_WEBHOOK_ID
+                webhook_details = get_neynar_client().get_webhook(webhook_id)
                 if webhook_details and webhook_details.get("active"):
-                    logger.info("✅ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 existe et est actif côté Neynar")
+                    logger.info(f"✅ Webhook {webhook_id} existe et est actif côté Neynar")
                     
-                    # Mettre à jour le webhook fixe 01K45KREDQ77B80YD87AAXJ3E8
+                    # Mettre à jour le webhook configuré
                     try:
                         # Convertir les FIDs en entiers pour l'API Neynar
                         updated_fids_int = [int(fid) for fid in updated_fids]
                         updated_webhook = get_neynar_client().update_webhook(
-                            "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
+                            webhook_id,
                             updated_fids_int
                         )
                         
@@ -471,13 +476,13 @@ def remove_fids_from_webhook(fids_to_remove: List[str]):
                         return False
                         
                 else:
-                    logger.warning("⚠️ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 n'existe plus ou est inactif côté Neynar")
+                    logger.warning(f"⚠️ Webhook {webhook_id} n'existe plus ou est inactif côté Neynar")
                     logger.warning("⚠️ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                     
             except Exception as e:
                 if "404" in str(e) or "not found" in str(e).lower():
-                    logger.error("❌ Webhook fixe 01K45KREDQ77B80YD87AAXJ3E8 N'EXISTE PLUS côté Neynar !")
+                    logger.error(f"❌ Webhook {webhook_id} N'EXISTE PLUS côté Neynar !")
                     logger.error("❌ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                 else:

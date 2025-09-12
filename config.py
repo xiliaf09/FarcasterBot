@@ -11,6 +11,7 @@ class Config:
     # Neynar Configuration
     NEYNAR_API_KEY: str = os.getenv('NEYNAR_API_KEY', '')
     NEYNAR_WEBHOOK_SECRET: str = os.getenv('NEYNAR_WEBHOOK_SECRET', '')
+    NEYNAR_WEBHOOK_ID: str = os.getenv('NEYNAR_WEBHOOK_ID', '01K45KREDQ77B80YD87AAXJ3E8')
     
     # Database Configuration
     DATABASE_URL: str = os.getenv('DATABASE_URL', '')
