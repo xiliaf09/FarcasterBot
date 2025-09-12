@@ -761,9 +761,20 @@ async def debug_webhook_command(ctx):
                 inline=False
             )
         except Exception as e:
+            # Extraire le code d'erreur HTTP si disponible
+            error_code = "N/A"
+            if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+                error_code = e.response.status_code
+            elif "404" in str(e):
+                error_code = "404"
+            elif "403" in str(e):
+                error_code = "403"
+            elif "400" in str(e):
+                error_code = "400"
+            
             embed.add_field(
                 name="2️⃣ Récupération Webhook",
-                value=f"❌ Erreur: {str(e)}\n🔍 Code: {getattr(e, 'response', {}).get('status_code', 'N/A')}",
+                value=f"❌ Erreur: {str(e)}\n🔍 Code: {error_code}",
                 inline=False
             )
         
@@ -795,9 +806,20 @@ async def debug_webhook_command(ctx):
                 db.close()
                 
         except Exception as e:
+            # Extraire le code d'erreur HTTP si disponible
+            error_code = "N/A"
+            if hasattr(e, 'response') and hasattr(e.response, 'status_code'):
+                error_code = e.response.status_code
+            elif "404" in str(e):
+                error_code = "404"
+            elif "403" in str(e):
+                error_code = "403"
+            elif "400" in str(e):
+                error_code = "400"
+            
             embed.add_field(
                 name="3️⃣ Mise à jour Webhook",
-                value=f"❌ Erreur: {str(e)}\n🔍 Code: {getattr(e, 'response', {}).get('status_code', 'N/A')}",
+                value=f"❌ Erreur: {str(e)}\n🔍 Code: {error_code}",
                 inline=False
             )
         
@@ -810,6 +832,106 @@ async def debug_webhook_command(ctx):
         
     except Exception as e:
         logger.error(f"Erreur dans la commande debug-webhook: {e}")
+        await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
+
+@bot.command(name='test-api')
+async def test_api_command(ctx):
+    """Commande pour tester l'API Neynar avec différents endpoints"""
+    try:
+        if not ctx.guild:
+            await ctx.reply("❌ Cette commande ne peut être utilisée que dans un serveur.")
+            return
+        
+        embed = discord.Embed(
+            title="🧪 Test API Neynar",
+            description="Test des différents endpoints de l'API...",
+            color=0x00BFFF
+        )
+        embed.set_footer(text="Farcaster Tracker Bot")
+        
+        message = await ctx.reply(embed=embed)
+        
+        client = get_neynar_client()
+        if client is None:
+            await ctx.reply("❌ Client Neynar non initialisé")
+            return
+        
+        # Test 1: Test de l'endpoint de base
+        try:
+            # Tester avec un FID connu (dwr = 194)
+            user = client.get_user_by_fid(194)
+            embed.add_field(
+                name="1️⃣ API Base",
+                value=f"✅ Endpoint de base fonctionne\n👤 Test avec FID 194: {user.get('username', 'N/A')}",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="1️⃣ API Base",
+                value=f"❌ Erreur endpoint de base: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 2: Test de l'endpoint webhook avec différents formats
+        webhook_id = config.NEYNAR_WEBHOOK_ID
+        
+        # Test 2a: Endpoint actuel
+        try:
+            webhook_details = client.get_webhook(webhook_id)
+            embed.add_field(
+                name="2️⃣ Webhook (format actuel)",
+                value=f"✅ Webhook trouvé avec le format actuel\n📊 Statut: {webhook_details.get('active', 'N/A')}",
+                inline=False
+            )
+        except Exception as e:
+            embed.add_field(
+                name="2️⃣ Webhook (format actuel)",
+                value=f"❌ Erreur format actuel: {str(e)}",
+                inline=False
+            )
+        
+        await message.edit(embed=embed)
+        
+        # Test 2b: Test avec un endpoint alternatif
+        try:
+            # Tester avec l'endpoint v1 au cas où
+            import requests
+            headers = client.headers
+            response = requests.get(
+                f"https://api.neynar.com/v1/farcaster/webhook/{webhook_id}",
+                headers=headers,
+                timeout=10
+            )
+            if response.status_code == 200:
+                embed.add_field(
+                    name="3️⃣ Webhook (v1)",
+                    value=f"✅ Webhook trouvé avec l'endpoint v1\n📊 Statut: {response.json().get('active', 'N/A')}",
+                    inline=False
+                )
+            else:
+                embed.add_field(
+                    name="3️⃣ Webhook (v1)",
+                    value=f"❌ Erreur v1: {response.status_code} - {response.text}",
+                    inline=False
+                )
+        except Exception as e:
+            embed.add_field(
+                name="3️⃣ Webhook (v1)",
+                value=f"❌ Erreur v1: {str(e)}",
+                inline=False
+            )
+        
+        # Mise à jour finale
+        embed.description = "Test de l'API terminé"
+        embed.color = 0x00FF00 if any("✅" in field.value for field in embed.fields) else 0xFF0000
+        await message.edit(embed=embed)
+        
+        logger.info(f"Test API effectué dans {ctx.guild.name} par {ctx.author.name}")
+        
+    except Exception as e:
+        logger.error(f"Erreur dans la commande test-api: {e}")
         await ctx.reply(f"❌ Une erreur est survenue: {str(e)}")
 
 @bot.command(name='far-help')
