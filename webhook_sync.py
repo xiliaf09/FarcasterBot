@@ -319,13 +319,13 @@ def force_webhook_fixe():
                         logger.warning("⚠️ Mais l'état local est synchronisé")
                         return False
                 else:
-                    logger.warning(f"⚠️ Webhook {webhook_id} n'existe plus ou est inactif côté Neynar")
+                    logger.warning(f"⚠️ Webhook 01K45KREDQ77B80YD87AAXJ3E8 n'existe plus ou est inactif côté Neynar")
                     logger.warning("⚠️ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                     
             except Exception as e:
                 if "404" in str(e) or "not found" in str(e).lower():
-                    logger.error(f"❌ Webhook {webhook_id} N'EXISTE PLUS côté Neynar !")
+                    logger.error(f"❌ Webhook 01K45KREDQ77B80YD87AAXJ3E8 N'EXISTE PLUS côté Neynar !")
                     logger.error("❌ Il faut le recréer manuellement sur Neynar ou utiliser un autre webhook")
                     return False
                 else:
