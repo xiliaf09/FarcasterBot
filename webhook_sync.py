@@ -1,6 +1,7 @@
 import json
 import logging
 import time
+from datetime import datetime
 from typing import List
 from database import get_session_local, WebhookState, TrackedAccount
 from neynar_client import get_neynar_client
@@ -94,7 +95,7 @@ def sync_neynar_webhook():
                             logger.info(f"✅ Webhook {webhook_id} réactivé")
                             # Mettre à jour l'état local
                             webhook_state.author_fids = json.dumps(all_fids)
-                            webhook_state.updated_at = time.time()
+                            webhook_state.updated_at = datetime.utcnow()
                             db.commit()
                         except Exception as reactivate_error:
                             logger.error(f"❌ Impossible de réactiver le webhook {webhook_id}: {reactivate_error}")
@@ -117,7 +118,7 @@ def sync_neynar_webhook():
                         
                         # Mettre à jour l'état en base
                         webhook_state.author_fids = json.dumps(all_fids)
-                        webhook_state.updated_at = time.time()
+                        webhook_state.updated_at = datetime.utcnow()
                         db.commit()
                         
                         logger.info(f"✅ Webhook {webhook_id} mis à jour avec succès")
@@ -294,7 +295,7 @@ def force_webhook_fixe():
             
             # Mettre à jour l'état local
             webhook_state.author_fids = json.dumps(all_fids)
-            webhook_state.updated_at = time.time()
+            webhook_state.updated_at = datetime.utcnow()
             db.commit()
             
             logger.info(f"✅ État local synchronisé avec {len(all_fids)} FID(s)")
@@ -385,7 +386,7 @@ def add_fids_to_webhook(new_fids: List[str]):
                         
                         # Mettre à jour l'état local
                         webhook_state.author_fids = json.dumps(updated_fids)
-                        webhook_state.updated_at = time.time()
+                        webhook_state.updated_at = datetime.utcnow()
                         db.commit()
                         
                         logger.info(f"✅ FIDs ajoutés au webhook {webhook_id}")
@@ -464,7 +465,7 @@ def remove_fids_from_webhook(fids_to_remove: List[str]):
                         
                         # Mettre à jour l'état local
                         webhook_state.author_fids = json.dumps(updated_fids)
-                        webhook_state.updated_at = time.time()
+                        webhook_state.updated_at = datetime.utcnow()
                         db.commit()
                         
                         logger.info("✅ FIDs retirés du webhook fixe 01K45KREDQ77B80YD87AAXJ3E8")
