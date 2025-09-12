@@ -31,7 +31,7 @@ def sync_neynar_webhook():
         db = get_session_local()()
         try:
             tracked_accounts = db.query(TrackedAccount.fid).distinct().all()
-            all_fids = [account[0] for account in tracked_accounts]
+            all_fids = [int(account[0]) for account in tracked_accounts]  # S'assurer que ce sont des entiers
             
             logger.info(f"FIDs collectés pour le tracking: {len(all_fids)} - {all_fids}")
             
@@ -287,7 +287,7 @@ def force_webhook_fixe():
             
             # Récupérer tous les FIDs trackés
             tracked_accounts = db.query(TrackedAccount.fid).distinct().all()
-            all_fids = [account[0] for account in tracked_accounts]
+            all_fids = [int(account[0]) for account in tracked_accounts]  # S'assurer que ce sont des entiers
             
             # Mettre à jour l'état local
             webhook_state.author_fids = json.dumps(all_fids)
@@ -351,10 +351,13 @@ def add_fids_to_webhook(new_fids: List[str]):
             
             # Récupérer les FIDs actuels
             current_fids = json.loads(webhook_state.author_fids)
+            # S'assurer que tous les FIDs sont des strings pour la cohérence
+            current_fids = [str(fid) for fid in current_fids]
             logger.info(f"🔧 FIDs actuels: {current_fids}")
             
-            # Ajouter les nouveaux FIDs (sans doublons)
-            updated_fids = list(set(current_fids + new_fids))
+            # Ajouter les nouveaux FIDs (sans doublons) - s'assurer qu'ils sont des strings
+            new_fids_str = [str(fid) for fid in new_fids]
+            updated_fids = list(set(current_fids + new_fids_str))
             logger.info(f"🔧 FIDs mis à jour: {updated_fids}")
             
             if updated_fids == current_fids:
@@ -369,9 +372,11 @@ def add_fids_to_webhook(new_fids: List[str]):
                     
                     # Mettre à jour le webhook fixe 01K45KREDQ77B80YD87AAXJ3E8
                     try:
+                        # Convertir les FIDs en entiers pour l'API Neynar
+                        updated_fids_int = [int(fid) for fid in updated_fids]
                         updated_webhook = get_neynar_client().update_webhook(
                             "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
-                            updated_fids
+                            updated_fids_int
                         )
                         
                         # Mettre à jour l'état local
@@ -424,10 +429,13 @@ def remove_fids_from_webhook(fids_to_remove: List[str]):
             
             # Récupérer les FIDs actuels
             current_fids = json.loads(webhook_state.author_fids)
+            # S'assurer que tous les FIDs sont des strings pour la cohérence
+            current_fids = [str(fid) for fid in current_fids]
             logger.info(f"🔧 FIDs actuels: {current_fids}")
             
-            # Retirer les FIDs spécifiés
-            updated_fids = [fid for fid in current_fids if fid not in fids_to_remove]
+            # Retirer les FIDs spécifiés - s'assurer qu'ils sont des strings
+            fids_to_remove_str = [str(fid) for fid in fids_to_remove]
+            updated_fids = [fid for fid in current_fids if fid not in fids_to_remove_str]
             logger.info(f"🔧 FIDs mis à jour: {updated_fids}")
             
             if updated_fids == current_fids:
@@ -442,9 +450,11 @@ def remove_fids_from_webhook(fids_to_remove: List[str]):
                     
                     # Mettre à jour le webhook fixe 01K45KREDQ77B80YD87AAXJ3E8
                     try:
+                        # Convertir les FIDs en entiers pour l'API Neynar
+                        updated_fids_int = [int(fid) for fid in updated_fids]
                         updated_webhook = get_neynar_client().update_webhook(
                             "01K45KREDQ77B80YD87AAXJ3E8",  # WEBHOOK FIXE
-                            updated_fids
+                            updated_fids_int
                         )
                         
                         # Mettre à jour l'état local

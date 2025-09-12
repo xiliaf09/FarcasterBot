@@ -125,14 +125,16 @@ async def track_command(ctx, fid_or_username: str, channel: Optional[discord.Tex
             
             # Ajouter le FID au webhook existant SANS le recréer
             try:
-                success = add_fids_to_webhook([user['fid']])
+                # Convertir le FID en string pour la compatibilité
+                fid_to_add = str(user['fid'])
+                success = add_fids_to_webhook([fid_to_add])
                 if success:
-                    logger.info(f"FID {user['fid']} ajouté au webhook existant")
+                    logger.info(f"✅ FID {fid_to_add} ajouté au webhook existant 01K45KREDQ77B80YD87AAXJ3E8")
                 else:
-                    logger.warning(f"Impossible d'ajouter le FID {user['fid']} au webhook, mais le compte est tracké localement")
+                    logger.warning(f"⚠️ Impossible d'ajouter le FID {fid_to_add} au webhook, mais le compte est tracké localement")
             except Exception as e:
-                logger.error(f"Erreur lors de l'ajout du FID au webhook: {e}")
-                logger.warning("Le compte est tracké localement, mais le webhook n'a pas été mis à jour")
+                logger.error(f"❌ Erreur lors de l'ajout du FID au webhook: {e}")
+                logger.warning("⚠️ Le compte est tracké localement, mais le webhook n'a pas été mis à jour")
             
             await ctx.reply(f"✅ Compte Farcaster `{user['username']}` (FID: {user['fid']}) ajouté au suivi dans {target_channel.mention} !")
             
@@ -181,14 +183,16 @@ async def untrack_command(ctx, fid_or_username: str):
                 
                 # Retirer le FID du webhook existant SANS le recréer
                 try:
-                    success = remove_fids_from_webhook([user['fid']])
+                    # Convertir le FID en string pour la compatibilité
+                    fid_to_remove = str(user['fid'])
+                    success = remove_fids_from_webhook([fid_to_remove])
                     if success:
-                        logger.info(f"FID {user['fid']} retiré du webhook existant")
+                        logger.info(f"✅ FID {fid_to_remove} retiré du webhook existant 01K45KREDQ77B80YD87AAXJ3E8")
                     else:
-                        logger.warning(f"Impossible de retirer le FID {user['fid']} du webhook, mais le compte est untracké localement")
+                        logger.warning(f"⚠️ Impossible de retirer le FID {fid_to_remove} du webhook, mais le compte est untracké localement")
                 except Exception as e:
-                    logger.error(f"Erreur lors du retrait du FID du webhook: {e}")
-                    logger.warning("Le compte est untracké localement, mais le webhook n'a pas été mis à jour")
+                    logger.error(f"❌ Erreur lors du retrait du FID du webhook: {e}")
+                    logger.warning("⚠️ Le compte est untracké localement, mais le webhook n'a pas été mis à jour")
                 
                 await ctx.reply(f"✅ Compte Farcaster `{user['username']}` (FID: {user['fid']}) supprimé du suivi !")
                 logger.info(f"Compte Farcaster {user['username']} (FID: {user['fid']}) supprimé du tracking dans {ctx.guild.name}")
